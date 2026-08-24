@@ -12,6 +12,7 @@ import {
 } from '@/analysis/audio';
 import { normaliseBpm } from '@/bpm/normalise';
 import { formatCamelot, formatMusicalKey, musicalKeyToCamelot } from '@/harmonic/camelot';
+import { sameTrackTitle } from '@/enrichment/matching';
 import { h } from '@/utils/dom';
 
 type ListeningStatus = 'idle' | 'starting' | 'listening' | 'stopped' | 'accepted' | 'error';
@@ -41,6 +42,10 @@ function keyReason(diagnostics: KeyDiagnostics): string {
       return `Tonal content detected but it fits no key well enough (${diagnostics.best.toFixed(2)} against ${diagnostics.thresholds.correlation}).${candidate} Try a section with clearer harmony, or less of the next record bleeding in.`;
     case 'margin':
       return `Two keys fit almost equally well, so committing would be a guess.${candidate}`;
+    case 'mode':
+      return `The tonic is plausible, but major and minor are still too close to call.${candidate} Keep playing a section that contains the third or fuller harmony.`;
+    case 'section':
+      return `Different tonal sections disagree, so the analyser is waiting for a repeatable key.${candidate}`;
     default:
       return `Key locked on chroma evidence.${candidate}`;
   }
@@ -219,7 +224,7 @@ export function createLiveAudioAnalysis(
     const currentAnalysis = store.analysisFor(track.id);
     const referenceCandidates = (currentAnalysis?.candidates ?? []).filter((candidate) =>
       candidate.reviewStatus !== 'rejected' &&
-      normaliseIdentity(candidate.matchedTitle) === normaliseIdentity(track.title) &&
+      sameTrackTitle(candidate.matchedTitle, track.title) &&
       (candidate.reviewStatus === 'approved' || (candidate.matchScore ?? 0) >= 0.55),
     );
     const sourceBpms = referenceCandidates
@@ -347,19 +352,14 @@ export function createLiveAudioAnalysis(
       }),
     );
 
-  const normaliseIdentity = (value: string | undefined) => (value ?? '')
-    .normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, ' ')
-    .trim();
-
   /** Source consensus is comparison evidence; it never changes the local vote. */
   const sourceComparison = (): HTMLElement | null => {
     const analysis = store.analysisFor(track.id);
+    // Same identity rule as track detail's candidate list, so a source cannot
+    // appear in one place and be invisible in the other.
     const candidates = (analysis?.candidates ?? []).filter((candidate) =>
       candidate.reviewStatus !== 'rejected' &&
-      normaliseIdentity(candidate.matchedTitle) === normaliseIdentity(track.title) &&
+      sameTrackTitle(candidate.matchedTitle, track.title) &&
       (candidate.reviewStatus === 'approved' || (candidate.matchScore ?? 0) >= 0.55),
     );
     const savedKey = analysis?.canonicalKey ? formatMusicalKey(analysis.canonicalKey) : undefined;
@@ -476,7 +476,7 @@ export function createLiveAudioAnalysis(
       ) : null,
       key ? h(
         'div', { class: 'analysis-evidence__block' },
-        h('strong', { text: `Key profile correlation · spread ${key.spread.toFixed(2)} · margin ${key.margin.toFixed(2)}${key.windows ? ` · tonal windows ${key.windows.accepted}/${key.windows.accepted + key.windows.rejected}` : ''}${key.peakCounts ? ` · peaks kept ${key.peakCounts.accepted}, rejected ${key.peakCounts.rejected}, folded ${key.peakCounts.harmonicsFolded}` : ''}${key.transientPeaksAttenuated ? ` · percussive/transient peaks reduced ${key.transientPeaksAttenuated}` : ''}` }),
+        h('strong', { text: `Key profile correlation · spread ${key.spread.toFixed(2)} · tonic margin ${key.margin.toFixed(2)}${key.modeMargin === undefined ? '' : ` · mode margin ${key.modeMargin.toFixed(2)}`}${key.windows ? ` · tonal windows ${key.windows.accepted}/${key.windows.accepted + key.windows.rejected}` : ''}${key.peakCounts ? ` · peaks kept ${key.peakCounts.accepted}, rejected ${key.peakCounts.rejected}, folded ${key.peakCounts.harmonicsFolded}` : ''}${key.transientPeaksAttenuated ? ` · percussive/transient peaks reduced ${key.transientPeaksAttenuated}` : ''}` }),
         h('div', { class: 'analysis-evidence__grid' },
           ...(key.candidates ?? []).map((candidate) => h('span', {
             text: `${candidate.name}: ${candidate.score.toFixed(3)}`,
@@ -484,7 +484,15 @@ export function createLiveAudioAnalysis(
         ),
         key.sectionVotes?.length ? h('p', {
           class: 'field__hint',
-          text: `Tonal-section votes: ${key.sectionVotes.map((vote) => `${vote.key} ×${vote.windows}`).join(' · ')}`,
+          text: `Tonal-section votes: ${key.sectionVotes.map((vote) => `${vote.key} ×${vote.windows}`).join(' · ')}${key.sectionAgreement === undefined ? '' : ` · leader ${Math.round(key.sectionAgreement * 100)}%`}`,
+        }) : null,
+        key.rangeEvidence ? h('p', {
+          class: 'field__hint',
+          text: `Register evidence: bass root ${key.rangeEvidence.bassRoot ?? '—'} · upper harmony ${key.rangeEvidence.upperKey ?? '—'}${key.rangeEvidence.agreed === undefined ? '' : key.rangeEvidence.agreed ? ' · agree' : ' · differ'}`,
+        }) : null,
+        key.separation ? h('p', {
+          class: 'field__hint',
+          text: `Harmonic/percussive split: ${Math.round(key.separation.harmonic * 100)}% / ${Math.round(key.separation.percussive * 100)}%`,
         }) : null,
         key.peaks?.length ? h(
           'details',
@@ -587,7 +595,8 @@ export function createLiveAudioAnalysis(
           h('div', { class: 'signal-stats' },
             h('span', { text: `spread ${diagnostics.spread.toFixed(2)} / ${diagnostics.thresholds.spread}` }),
             h('span', { text: `match ${diagnostics.best.toFixed(2)} / ${diagnostics.thresholds.correlation}` }),
-            h('span', { text: `margin ${diagnostics.margin.toFixed(2)} / ${diagnostics.thresholds.margin}` }),
+            h('span', { text: `tonic ${diagnostics.margin.toFixed(2)} / ${diagnostics.thresholds.margin}` }),
+            h('span', { text: `mode ${(diagnostics.modeMargin ?? 0).toFixed(2)} / ${diagnostics.thresholds.modeMargin}` }),
           ),
           h('p', {
             class: diagnostics.rejectedBy ? 'notice notice--warning' : 'field__hint',
@@ -666,12 +675,18 @@ export function createLiveAudioAnalysis(
     const completion = saving ? 100 : Math.min(100, Math.round((result.frames.length / 30) * 100));
     const visibleFrames = showDiagnostics ? result.frames : result.frames.slice(-8);
     const firstVisibleFrame = Math.max(1, result.frames.length - visibleFrames.length + 1);
+    const hiddenFrames = result.frames.length - visibleFrames.length;
     const frameHistory = result.frames.length
       ? h(
           'div',
           { class: 'analysis-samples stack stack--tight' },
           h('h3', { class: 'section-title', text: `Captured samples (${result.frames.length})` }),
-          h('p', { class: 'field__hint', text: 'Each row is one analysis window. The final result above is the rolling agreement across these samples.' }),
+          h('p', {
+            class: 'field__hint',
+            text: hiddenFrames
+              ? `Each row is one analysis window. The final result above is the rolling agreement across all ${result.frames.length}; the latest ${visibleFrames.length} are listed, and "Show all data points and correlations" lists the rest.`
+              : 'Each row is one analysis window. The final result above is the rolling agreement across these samples.',
+          }),
           h(
             'div',
             { class: 'analysis-samples__list' },
@@ -782,7 +797,7 @@ export function createLiveAudioAnalysis(
         }) : null,
       ),
       showDiagnostics ? detailedEvidence() : null,
-      showDiagnostics ? frameHistory : null,
+      frameHistory,
       status === 'listening' && hasFrames && result.bpm === undefined && result.key === undefined
         ? h('p', {
             class: 'field__hint',

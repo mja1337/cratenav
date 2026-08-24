@@ -123,3 +123,42 @@ export function scoreIdentity(context: MatchContext, identity: ProviderIdentity)
     rationale: reasons.join('; '),
   };
 }
+
+/**
+ * Strip a trailing bracketed segment, e.g. "Sound Murderer (VIP)".
+ *
+ * Applied before `words`, because `words` erases the brackets that mark the
+ * segment. Repeated so "Title (VIP) [2004 Remaster]" reduces cleanly.
+ */
+function bareTitle(value: string | undefined): string {
+  let text = (value ?? '').trim();
+  for (let pass = 0; pass < 3; pass += 1) {
+    const stripped = text.replace(/[([{][^)\]}]*[)\]}]\s*$/, '').trim();
+    if (stripped === text) break;
+    text = stripped;
+  }
+  return words(text);
+}
+
+/**
+ * Does a source's matched recording title name the vinyl track being viewed?
+ *
+ * Track detail shows candidates for ONE track, but an enrichment run stores
+ * candidates for every track on the release, so the list has to be filtered by
+ * identity rather than shown wholesale. Equality is on the normalised title,
+ * with a second pass that ignores a trailing bracketed version: providers
+ * routinely return "Title (Original Mix)" where the sleeve just says "Title",
+ * and treating that as a different track hides the only result there is.
+ *
+ * Deliberately NOT a containment test: "Jungle" must not match "Jungle Fever",
+ * which is a different track on the same record.
+ */
+export function sameTrackTitle(a: string | undefined, b: string | undefined): boolean {
+  const exactA = words(a);
+  const exactB = words(b);
+  if (!exactA || !exactB) return false;
+  if (exactA === exactB) return true;
+  const bareA = bareTitle(a);
+  const bareB = bareTitle(b);
+  return Boolean(bareA) && bareA === bareB;
+}

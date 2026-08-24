@@ -23,6 +23,8 @@ import { recommend, type RecommendationScope } from '@/recommend/engine';
 import { pitchSimulator } from '@/components/pitch-simulator';
 import { asPlaybackTarget, nativeBpmOf, nativeKeyOf } from '@/pitch/native';
 import { recommendationList } from '@/components/recommendations';
+import { sameTrackTitle } from '@/enrichment/matching';
+import { camelotFor, reviewCandidatePatch } from '@/analysis/candidate-review';
 import { createLiveAudioAnalysis } from '@/components/live-audio-analysis';
 import { onlineLookupPanel } from '@/components/online-lookup';
 import { clear, h } from '@/utils/dom';
@@ -690,10 +692,8 @@ function candidateList(
   track: Track,
   analysis: TrackAnalysis,
 ): HTMLElement {
-  const titleKey = (value: string | undefined) => (value ?? '').normalize('NFKD')
-    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
   const matching = analysis.candidates.filter(
-    (candidate) => titleKey(candidate.matchedTitle) === titleKey(track.title),
+    (candidate) => sameTrackTitle(candidate.matchedTitle, track.title),
   );
   if (!matching.length) return h('p', {
     class: 'field__hint',
@@ -714,8 +714,7 @@ function candidateList(
         candidate.keyConfidence ?? candidate.confidence,
         identityConfidence,
       );
-      const camelot = candidate.camelotKey ??
-        (candidate.canonicalKey ? musicalKeyToCamelot(candidate.canonicalKey) ?? undefined : undefined);
+      const camelot = camelotFor(candidate);
       const matchedTitle = candidate.matchedTitle
         ? `${candidate.matchedArtist ? `${candidate.matchedArtist} — ` : ''}${candidate.matchedTitle}${
             candidate.matchedVersion ? ` (${candidate.matchedVersion})` : ''
@@ -732,32 +731,11 @@ function candidateList(
         placeholder: 'Why is this source right or wrong?', value: candidate.reviewComment ?? '',
       });
       const review = async (reviewStatus: 'approved' | 'rejected') => {
-        const candidates = analysis.candidates.map((item) => item === candidate ? {
-          ...item,
-          reviewStatus,
-          reviewComment: comment.value.trim() || undefined,
-          reviewedAt: new Date().toISOString(),
-        } : item);
-        const patch: Partial<TrackAnalysis> = { candidates };
-        if (reviewStatus === 'approved') {
-          patch.analysisMethod = `External candidate approved by user${comment.value.trim() ? `: ${comment.value.trim()}` : ''}`;
-          if (candidate.canonicalBpm !== undefined) Object.assign(patch, {
-            sourceBpm: candidate.sourceBpm ?? candidate.canonicalBpm,
-            canonicalBpm: candidate.canonicalBpm,
-            nativeBpm: candidate.nativeBpm ?? candidate.canonicalBpm,
-            bpmSource: candidate.source, bpmConfidence, verifiedBpm: true,
-            normalisationReason: candidate.normalisationReason,
-          });
-          if (candidate.canonicalKey || camelot) Object.assign(patch, {
-            sourceKey: candidate.sourceKey, canonicalKey: candidate.canonicalKey, camelotKey: camelot,
-            nativeKey: candidate.nativeKey ?? candidate.canonicalKey,
-            nativeCamelot: candidate.nativeCamelot ?? camelot,
-            nativePitchClass: candidate.nativePitchClass,
-            nativeMode: candidate.nativeMode ?? candidate.canonicalKey?.tonality,
-            keySource: candidate.source, keyConfidence, verifiedKey: true,
-          });
-        }
-        await store.updateAnalysis(track.id, patch);
+        await store.updateAnalysis(track.id, reviewCandidatePatch(analysis, candidate, {
+          status: reviewStatus,
+          comment: comment.value,
+          now: new Date().toISOString(),
+        }));
       };
       return h(
         'div',

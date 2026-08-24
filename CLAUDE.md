@@ -77,6 +77,24 @@ See README.md for setup and deployment. This file holds the things that are easy
   backlinks in `index.html` and `public/getsongbpm.html` for non-JavaScript registration crawlers.
   The public Pages build has no metadata proxy until `VITE_METADATA_PROXY_BASE` points to a restricted
   Worker; never imply hosted enrichment works without it or place a user API key in the build environment.
+- One rule decides whether a source candidate is about the track on screen: `sameTrackTitle` in
+  `src/enrichment/matching.ts`. An enrichment run stores candidates for every track on the release,
+  so track detail showing them all invited a DJ to accept the neighbouring track's BPM. The rule
+  compares normalised titles and retries ignoring a trailing bracketed version, because providers
+  answer "Title (Original Mix)" where the sleeve says "Title" and treating that as a different track
+  hides the only result there is. It is deliberately NOT containment: "Jungle" must not match
+  "Jungle Fever". Both the provenance candidate list and the microphone panel's source comparison
+  use it, or a source appears in one place and is invisible in the other.
+- A candidate review is adjudication of ONE source's claim, so the comment is stored on the
+  candidate, never as a loose analysis note: "GetSongBPM has the 12-inch at 174" only means
+  something attached to the source it judges.
+- Reject is the undo for Approve. Rejecting a candidate must withdraw the value that candidate
+  supplied — matched on source AND value, so a hand-entered or microphone-measured figure on the
+  other dimension survives. Leaving it produced an analysis reading "verified 174 BPM, source
+  AcousticBrainz" directly beside that same source marked rejected. Rejection is also honoured by
+  `hasUnconfirmedAnalysis` and `candidateConflicts`, so a dismissed source stops nagging from the
+  Analyse queue. The rules live in `src/analysis/candidate-review.ts` as a pure patch builder
+  because they are the provenance rules that are easiest to get wrong.
 - Concrete enrichment adapters belong only in `src/enrichment/registry.ts`. Views consume provider
   capabilities, never a named adapter. Candidate refreshes must merge with independent prior
   evidence, retain reviewable recording identity, and keep BPM/key confidence separate.
@@ -188,6 +206,13 @@ See README.md for setup and deployment. This file holds the things that are easy
   nothing is confident yet" — and both look like a hang. `Analyser.input()` reports receiving/RMS/
   peak/waveform plus seconds until the first reading, and the panel drives its own 120ms tick
   because detection frames only land every 2s.
+- The captured samples are the evidence, not a diagnostic. Each analysis window's own BPM and key
+  reading is listed on screen ahead of the aggregated score, so a DJ can see WHY the rolling vote
+  landed where it did. It must not sit behind the "Show all data points and correlations" toggle:
+  hidden, the final number is an assertion with nothing behind it. Collapsed the list shows the
+  latest few and states the true total, for the same reason the analysis queue does.
+- The saving wheel spins the ring; its label must counter-rotate or the wheel spins its own text
+  illegible.
 - Enrichment outcomes are durable per provider per track, so a release or track can always show what
   each source said — found / no data / error, with the error text. A run that leaves no visible trace
   is indistinguishable from one that never happened.

@@ -269,6 +269,8 @@ export interface KeyDiagnostics {
   best: number;
   /** Gap to the best candidate on a different tonic. */
   margin: number;
+  /** Gap between major and minor interpretations on the winning tonic. */
+  modeMargin?: number;
   /** The leading candidate, whether or not it was accepted. */
   candidate?: string;
   /** Leading alternatives before thresholding, for an explainable capture UI. */
@@ -287,11 +289,17 @@ export interface KeyDiagnostics {
   observedChroma?: number[];
   /** Independent tonal-window votes inside the current analysis frame. */
   sectionVotes?: { key: string; windows: number }[];
+  /** Share of accepted tonal windows supporting the leading local key. */
+  sectionAgreement?: number;
+  /** Independent note-transcription evidence from bass and upper registers. */
+  rangeEvidence?: { bassRoot?: string; upperKey?: string; agreed?: boolean };
+  /** Energy split after harmonic/percussive median masking. */
+  separation?: { harmonic: number; percussive: number };
   transientPeaksAttenuated?: number;
   /** Which guard stopped it, if any. */
-  rejectedBy?: 'no-audio' | 'no-peaks' | 'spread' | 'correlation' | 'margin';
+  rejectedBy?: 'no-audio' | 'no-peaks' | 'spread' | 'correlation' | 'margin' | 'mode' | 'section';
   /** Thresholds in force, so the UI can state them rather than hardcode them. */
-  thresholds: { spread: number; correlation: number; margin: number };
+  thresholds: { spread: number; correlation: number; margin: number; modeMargin: number; sectionAgreement: number };
 }
 
 export type AnalysisProfile = 'general' | 'drum-and-bass';
@@ -324,6 +332,8 @@ export const KEY_THRESHOLDS = {
   spread: 0.14,
   correlation: 0.32,
   margin: 0.03,
+  modeMargin: 0.015,
+  sectionAgreement: 0.45,
 } as const;
 
 const PITCH_CLASSES: readonly PitchClass[] = [
@@ -801,8 +811,175 @@ function deconvolveHarmonics(observed: readonly number[]): number[] {
   return estimate.map((value, index) => value * 0.7 + observed[index]! * 0.3);
 }
 
+interface SpectralFrame {
+  magnitudes: Float64Array;
+}
+
+interface NoteActivation {
+  midi: number;
+  strength: number;
+}
+
+function medianSlice(values: ArrayLike<number>, from: number, to: number): number {
+  const slice: number[] = [];
+  for (let index = Math.max(0, from); index <= Math.min(values.length - 1, to); index += 1) {
+    slice.push(values[index]!);
+  }
+  slice.sort((a, b) => a - b);
+  return slice[Math.floor(slice.length / 2)] ?? 0;
+}
+
 /**
- * Detect musical key from an FFT chroma and Krumhansl profile correlation.
+ * Median-filter HPSS mask in the magnitude domain.
+ *
+ * Sustained notes form horizontal ridges across time, while drums form broad
+ * vertical ridges across frequency. The mask deliberately leaves uncertain
+ * residual energy out of the key stream instead of forcing it into a note.
+ */
+function harmonicSpectrum(
+  frames: readonly SpectralFrame[],
+  frameIndex: number,
+): { magnitudes: Float64Array; harmonic: number; percussive: number } {
+  const source = frames[frameIndex]!.magnitudes;
+  const output = new Float64Array(source.length);
+  let harmonicEnergy = 0;
+  let percussiveEnergy = 0;
+  for (let bin = 0; bin < source.length; bin += 1) {
+    const acrossTime: number[] = [];
+    for (let offset = -2; offset <= 2; offset += 1) {
+      const neighbour = frames[frameIndex + offset];
+      if (neighbour) acrossTime.push(neighbour.magnitudes[bin]!);
+    }
+    acrossTime.sort((a, b) => a - b);
+    const harmonicMedian = acrossTime[Math.floor(acrossTime.length / 2)] ?? 0;
+    const percussiveMedian = medianSlice(source, bin - 8, bin + 8);
+    const harmonicSquare = harmonicMedian * harmonicMedian;
+    const percussiveSquare = percussiveMedian * percussiveMedian;
+    const mask = harmonicSquare / Math.max(1e-12, harmonicSquare + percussiveSquare);
+    output[bin] = source[bin]! * mask;
+    harmonicEnergy += source[bin]! * mask;
+    percussiveEnergy += source[bin]! * (1 - mask);
+  }
+  return { magnitudes: output, harmonic: harmonicEnergy, percussive: percussiveEnergy };
+}
+
+function interpolatedMagnitude(
+  magnitudes: Float64Array,
+  frequency: number,
+  firstBin: number,
+  fftSize: number,
+  sampleRate: number,
+): number {
+  const position = (frequency * fftSize) / sampleRate - firstBin;
+  const lower = Math.floor(position);
+  const fraction = position - lower;
+  const left = magnitudes[lower] ?? 0;
+  const right = magnitudes[lower + 1] ?? left;
+  return left + (right - left) * fraction;
+}
+
+/**
+ * Approximate note-level NNLS transcription on a three-bins-per-semitone
+ * log-frequency spectrum. Unlike pitch-class deconvolution, this retains the
+ * octave of each possible fundamental until its harmonic series is explained.
+ */
+function transcribeNotes(
+  magnitudes: Float64Array,
+  firstBin: number,
+  fftSize: number,
+  sampleRate: number,
+  tuningOffset: number,
+  lowestHz: number,
+  highestHz: number,
+): NoteActivation[] {
+  const binsPerSemitone = 3;
+  const minimumMidi = Math.ceil(69 + 12 * Math.log2(lowestHz / 440));
+  const maximumMidi = Math.floor(69 + 12 * Math.log2(highestHz / 440));
+  const logBinCount = (maximumMidi - minimumMidi) * binsPerSemitone + 1;
+  const observation = new Float64Array(logBinCount);
+  for (let logBin = 0; logBin < logBinCount; logBin += 1) {
+    const midi = minimumMidi + logBin / binsPerSemitone;
+    const frequency = 440 * 2 ** ((midi + tuningOffset - 69) / 12);
+    observation[logBin] = Math.sqrt(Math.max(0, interpolatedMagnitude(
+      magnitudes, frequency, firstBin, fftSize, sampleRate,
+    )));
+  }
+
+  const noteCount = maximumMidi - minimumMidi + 1;
+  const basis = Array.from({ length: logBinCount }, () => new Float64Array(noteCount));
+  for (let note = 0; note < noteCount; note += 1) {
+    const fundamentalMidi = minimumMidi + note;
+    for (let harmonic = 1; harmonic <= 10; harmonic += 1) {
+      const harmonicMidi = fundamentalMidi + 12 * Math.log2(harmonic);
+      const position = (harmonicMidi - minimumMidi) * binsPerSemitone;
+      if (position < 0 || position >= logBinCount - 1) break;
+      const lower = Math.floor(position);
+      const fraction = position - lower;
+      const weight = 1 / Math.sqrt(harmonic);
+      basis[lower]![note] = basis[lower]![note]! + weight * (1 - fraction);
+      basis[lower + 1]![note] = basis[lower + 1]![note]! + weight * fraction;
+    }
+  }
+
+  let estimate = new Float64Array(noteCount);
+  for (let note = 0; note < noteCount; note += 1) {
+    estimate[note] = Math.max(1e-6, observation[note * binsPerSemitone] ?? 0);
+  }
+  for (let iteration = 0; iteration < 24; iteration += 1) {
+    const reconstruction = new Float64Array(logBinCount);
+    for (let bin = 0; bin < logBinCount; bin += 1) {
+      let value = 0;
+      for (let note = 0; note < noteCount; note += 1) value += basis[bin]![note]! * estimate[note]!;
+      reconstruction[bin] = value;
+    }
+    const next = new Float64Array(noteCount);
+    for (let note = 0; note < noteCount; note += 1) {
+      let numerator = 0;
+      let denominator = 0.02;
+      for (let bin = 0; bin < logBinCount; bin += 1) {
+        const weight = basis[bin]![note]!;
+        numerator += weight * observation[bin]!;
+        denominator += weight * reconstruction[bin]!;
+      }
+      next[note] = Math.max(0, estimate[note]! * numerator / Math.max(1e-9, denominator));
+    }
+    estimate = next;
+  }
+
+  const peak = Math.max(...estimate);
+  if (!peak) return [];
+  const activations: NoteActivation[] = [];
+  for (let note = 0; note < noteCount; note += 1) {
+    if (estimate[note]! < peak * 0.035) continue;
+    activations.push({ midi: minimumMidi + note, strength: estimate[note]! });
+  }
+  return activations;
+}
+
+function keyModelScore(
+  chroma: readonly number[],
+  tonic: number,
+  tonality: Tonality,
+  profile: AnalysisProfile,
+  bassSupport = 0,
+): number {
+  const profileScore = correlation(
+    chroma,
+    rotatedProfile(tonality === 'major' ? MAJOR_PROFILE : MINOR_PROFILE, tonic),
+  );
+  if (profile !== 'drum-and-bass') return profileScore;
+  const peak = Math.max(...chroma);
+  const third = (tonic + (tonality === 'major' ? 4 : 3)) % 12;
+  const fifth = (tonic + 7) % 12;
+  const chordSupport = peak
+    ? (chroma[tonic]! + chroma[third]! + chroma[fifth]!) / (peak * 3)
+    : 0;
+  return profileScore * 0.72 + chordSupport * 0.2 + bassSupport * 0.08;
+}
+
+/**
+ * Detect musical key from harmonic/percussive separation, log-frequency note
+ * transcription and key-profile scoring.
  *
  * Two things here are load-bearing and were previously wrong:
  *
@@ -840,6 +1017,11 @@ export function detectKey(
   const peakEvidence: NonNullable<KeyDiagnostics['peaks']> = [];
   const sectionVoteCounts = new Map<string, number>();
   let previousWhitened: Float64Array | undefined;
+  const bassChroma = Array<number>(12).fill(0);
+  const bassPeakVotes = Array<number>(12).fill(0);
+  const upperChroma = Array<number>(12).fill(0);
+  let harmonicEnergy = 0;
+  let percussiveEnergy = 0;
 
   // Pitch matters most between A2 and C7; below that a semitone is narrower
   // than an FFT bin, above it harmonics dominate over the tonal centre.
@@ -849,24 +1031,36 @@ export function detectKey(
   const lastBin = Math.min(fftSize / 2 - 1, Math.floor((highestHz * fftSize) / sampleRate));
   if (lastBin <= firstBin) return {};
 
+  const spectralFrames: SpectralFrame[] = [];
   for (let offset = 0; offset + fftSize <= samples.length; offset += hop) {
-    const windowChromaSum = Array<number>(12).fill(0);
-    const windowChromaBins = Array<number>(12).fill(0);
     const real = new Float64Array(fftSize);
     const imag = new Float64Array(fftSize);
     let energy = 0;
-    for (let i = 0; i < fftSize; i += 1) {
-      const value = samples[offset + i]!;
+    for (let index = 0; index < fftSize; index += 1) {
+      const value = samples[offset + index]!;
       energy += value * value;
-      real[i] = value * (0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (fftSize - 1)));
+      real[index] = value * (0.5 - 0.5 * Math.cos((2 * Math.PI * index) / (fftSize - 1)));
     }
     if (energy / fftSize < 1e-7) continue;
     fft(real, imag);
-
     const magnitudes = new Float64Array(lastBin - firstBin + 1);
     for (let bin = firstBin; bin <= lastBin; bin += 1) {
       magnitudes[bin - firstBin] = Math.hypot(real[bin]!, imag[bin]!);
     }
+    spectralFrames.push({ magnitudes });
+  }
+
+  for (let frameIndex = 0; frameIndex < spectralFrames.length; frameIndex += 1) {
+    const windowChromaSum = Array<number>(12).fill(0);
+    const windowChromaBins = Array<number>(12).fill(0);
+    const windowPitchPeaks: { frequency: number; pitchClass: number; weight: number }[] = [];
+    const rawMagnitudes = spectralFrames[frameIndex]!.magnitudes;
+    const separated = profile === 'drum-and-bass'
+      ? harmonicSpectrum(spectralFrames, frameIndex)
+      : { magnitudes: rawMagnitudes, harmonic: 0, percussive: 0 };
+    const magnitudes = separated.magnitudes;
+    harmonicEnergy += separated.harmonic;
+    percussiveEnergy += separated.percussive;
 
     // A sparse tonal spectrum has a low geometric/arithmetic mean ratio;
     // broadband noise is close to flat. Peak-picking alone can turn random
@@ -1023,6 +1217,54 @@ export function detectKey(
         weight: contribution,
         ...(harmonicOf ? { harmonicOf } : {}),
       });
+      windowPitchPeaks.push({
+        // Root evidence must come from an observed peak. A weak kick bin can
+        // make the harmonic folder hypothesise an octave-down parent that was
+        // never actually present, which is useful for chroma but unsafe as a
+        // bass-note label.
+        frequency,
+        pitchClass: nearestNote,
+        weight: contribution,
+      });
+    }
+
+    if (profile === 'drum-and-bass') {
+      const strongestPitchPeak = Math.max(0, ...windowPitchPeaks.map((entry) => entry.weight));
+      const dominantBassPeak = windowPitchPeaks
+        .filter((entry) => entry.frequency <= 300 && entry.weight >= strongestPitchPeak * 0.18)
+        .sort((left, right) => right.weight - left.weight)[0];
+      if (dominantBassPeak) {
+        bassPeakVotes[dominantBassPeak.pitchClass] =
+          bassPeakVotes[dominantBassPeak.pitchClass]! + dominantBassPeak.weight;
+      }
+      const activations = transcribeNotes(
+        whitened,
+        firstBin,
+        fftSize,
+        sampleRate,
+        tuningOffset,
+        lowestHz,
+        highestHz,
+      );
+      if (activations.length) {
+        const noteChroma = Array<number>(12).fill(0);
+        for (const activation of activations) {
+          const pitchClass = ((activation.midi % 12) + 12) % 12;
+          const weight = Math.sqrt(activation.strength);
+          noteChroma[pitchClass] = noteChroma[pitchClass]! + weight;
+          const range = activation.midi <= 55 ? bassChroma : upperChroma;
+          range[pitchClass] = range[pitchClass]! + weight;
+        }
+        const peakChromaMaximum = Math.max(...windowChromaSum);
+        const noteChromaMaximum = Math.max(...noteChroma);
+        for (let pitchClass = 0; pitchClass < 12; pitchClass += 1) {
+          const peakValue = peakChromaMaximum ? windowChromaSum[pitchClass]! / peakChromaMaximum : 0;
+          const noteValue = noteChromaMaximum ? noteChroma[pitchClass]! / noteChromaMaximum : 0;
+          windowChromaSum[pitchClass] = peakValue * 0.25 + noteValue * 0.75;
+          windowChromaBins[pitchClass] = 1;
+        }
+        peaked = true;
+      }
     }
     previousWhitened = whitened;
     if (!peaked) continue;
@@ -1041,17 +1283,17 @@ export function detectKey(
       rejectedWindows += 1;
       continue;
     }
-    const localModel = profile === 'drum-and-bass' ? deconvolveHarmonics(localChroma) : localChroma;
+    // D&B note activations have already been unmixed at their original
+    // octaves; a second pitch-class deconvolution would erase real chord tones.
+    const localModel = localChroma;
     const localCandidates: { name: string; score: number }[] = [];
     for (let tonic = 0; tonic < 12; tonic += 1) {
-      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} major`, score: correlation(localModel, rotatedProfile(MAJOR_PROFILE, tonic)) });
-      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} minor`, score: correlation(localModel, rotatedProfile(MINOR_PROFILE, tonic)) });
+      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} major`, score: keyModelScore(localModel, tonic, 'major', profile) });
+      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} minor`, score: keyModelScore(localModel, tonic, 'minor', profile) });
     }
     localCandidates.sort((a, b) => b.score - a.score);
     const localWinner = localCandidates[0];
-    const localRival = localWinner
-      ? localCandidates.find((candidate) => candidate.name.split(' ')[0] !== localWinner.name.split(' ')[0])
-      : undefined;
+    const localRival = localCandidates[1];
     if (localWinner && localWinner.score >= 0.22 && localWinner.score - (localRival?.score ?? 0) >= 0.015) {
       sectionVoteCounts.set(localWinner.name, (sectionVoteCounts.get(localWinner.name) ?? 0) + 1);
     }
@@ -1087,7 +1329,10 @@ export function detectKey(
   const observedChroma = chromaSum.map((total, pitchClass) =>
     chromaBins[pitchClass] ? total / chromaBins[pitchClass]! : 0,
   );
-  const chroma = profile === 'drum-and-bass' ? deconvolveHarmonics(observedChroma) : observedChroma;
+  const transcribedEnergy = [...bassChroma, ...upperChroma].reduce((sum, value) => sum + value, 0);
+  const chroma = profile === 'drum-and-bass' && !transcribedEnergy
+    ? deconvolveHarmonics(observedChroma)
+    : observedChroma;
   const chromaTotal = chroma.reduce((sum, value) => sum + value, 0);
   if (chromaTotal <= 0) return bail('no-audio');
 
@@ -1101,28 +1346,68 @@ export function detectKey(
     chroma.reduce((sum, value) => sum + (value - chromaMean) ** 2, 0) / 12,
   ) / chromaMean;
 
+  const bassPeak = Math.max(...bassPeakVotes);
+  const bassRootIndex = bassPeak ? bassPeakVotes.indexOf(bassPeak) : -1;
   const candidates: { tonic: number; tonality: Tonality; score: number }[] = [];
   for (let tonic = 0; tonic < 12; tonic += 1) {
-    candidates.push({ tonic, tonality: 'major', score: correlation(chroma, rotatedProfile(MAJOR_PROFILE, tonic)) });
-    candidates.push({ tonic, tonality: 'minor', score: correlation(chroma, rotatedProfile(MINOR_PROFILE, tonic)) });
+    for (const tonality of ['major', 'minor'] as const) {
+      // A profile alone can call a sparse root-position triad by its third
+      // (E-G#-B as G# minor, for example). Complete chord support and the
+      // lowest stable note provide bounded D&B-specific evidence.
+      const bassSupport = bassPeak ? bassPeakVotes[tonic]! / bassPeak : 0;
+      const score = keyModelScore(chroma, tonic, tonality, profile, bassSupport);
+      candidates.push({ tonic, tonality, score });
+    }
   }
   candidates.sort((a, b) => b.score - a.score);
   const best = candidates[0];
 
-  // The runner-up must be a DIFFERENT tonic. Major/minor on the same root
-  // always score similarly, so comparing against it would understate every
-  // margin and make confidence meaningless.
+  // Tonic and mode are independent decisions. The old detector ignored the
+  // opposite mode on the same tonic entirely, allowing A major versus A minor
+  // ambiguity to retain high confidence.
   const rival = best ? candidates.find((candidate) => candidate.tonic !== best.tonic) : undefined;
   const margin = best ? best.score - (rival?.score ?? 0) : 0;
+  const parallelMode = best
+    ? candidates.find((candidate) => candidate.tonic === best.tonic && candidate.tonality !== best.tonality)
+    : undefined;
+  const profileModeMargin = best ? best.score - (parallelMode?.score ?? 0) : 0;
+  const chromaPeak = Math.max(...chroma);
+  const expectedThird = best
+    ? chroma[(best.tonic + (best.tonality === 'major' ? 4 : 3)) % 12]!
+    : 0;
+  const oppositeThird = best
+    ? chroma[(best.tonic + (best.tonality === 'major' ? 3 : 4)) % 12]!
+    : 0;
+  const thirdModeMargin = chromaPeak ? (expectedThird - oppositeThird) / chromaPeak : 0;
+  const modeMargin = Math.min(profileModeMargin, thirdModeMargin);
   const candidateName = best
     ? `${PITCH_CLASSES[best.tonic]!} ${best.tonality}`
     : undefined;
+  const sectionVotes = [...sectionVoteCounts.entries()]
+    .sort((a, b) => b[1] - a[1]);
+  const sectionVoteTotal = sectionVotes.reduce((sum, entry) => sum + entry[1], 0);
+  const sectionAgreement = sectionVoteTotal ? (sectionVotes[0]?.[1] ?? 0) / sectionVoteTotal : 0;
+  const upperCandidates: { name: string; score: number }[] = [];
+  if (Math.max(...upperChroma) > 0) {
+    for (let tonic = 0; tonic < 12; tonic += 1) {
+      upperCandidates.push({ name: `${PITCH_CLASSES[tonic]!} major`, score: correlation(upperChroma, rotatedProfile(MAJOR_PROFILE, tonic)) });
+      upperCandidates.push({ name: `${PITCH_CLASSES[tonic]!} minor`, score: correlation(upperChroma, rotatedProfile(MINOR_PROFILE, tonic)) });
+    }
+    upperCandidates.sort((a, b) => b.score - a.score);
+  }
+  const upperKey = upperCandidates[0]?.name;
+  const bassRoot = bassRootIndex >= 0 ? PITCH_CLASSES[bassRootIndex] : undefined;
+  const rangeAgreed = best && bassRootIndex >= 0 && upperKey
+    ? bassRootIndex === best.tonic && upperKey === candidateName
+    : undefined;
+  const separatedTotal = harmonicEnergy + percussiveEnergy;
 
   const diagnostics: KeyDiagnostics = {
     chroma: normalised,
     spread,
     best: best?.score ?? 0,
     margin,
+    modeMargin,
     thresholds,
     windows: { accepted: windows, rejected: rejectedWindows },
     peaks: peakEvidence.sort((a, b) => b.weight - a.weight).slice(0, 30),
@@ -1131,10 +1416,21 @@ export function detectKey(
       const observedPeak = Math.max(...observedChroma);
       return observedChroma.map((value) => observedPeak ? value / observedPeak : 0);
     })(),
-    sectionVotes: [...sectionVoteCounts.entries()]
-      .sort((a, b) => b[1] - a[1])
+    sectionVotes: sectionVotes
       .slice(0, 5)
       .map(([key, windows]) => ({ key, windows })),
+    sectionAgreement,
+    rangeEvidence: {
+      ...(bassRoot ? { bassRoot } : {}),
+      ...(upperKey ? { upperKey } : {}),
+      ...(rangeAgreed !== undefined ? { agreed: rangeAgreed } : {}),
+    },
+    ...(separatedTotal ? {
+      separation: {
+        harmonic: harmonicEnergy / separatedTotal,
+        percussive: percussiveEnergy / separatedTotal,
+      },
+    } : {}),
     transientPeaksAttenuated,
     ...(candidateName ? { candidate: candidateName } : {}),
     candidates: candidates.slice(0, 5).map((candidate) => ({
@@ -1150,8 +1446,20 @@ export function detectKey(
   if (margin < thresholds.margin) {
     return { keyDiagnostics: { ...diagnostics, rejectedBy: 'margin' } };
   }
+  if (modeMargin < thresholds.modeMargin) {
+    return { keyDiagnostics: { ...diagnostics, rejectedBy: 'mode' } };
+  }
+  if (
+    profile === 'drum-and-bass' &&
+    sectionVoteTotal >= 4 &&
+    (sectionVotes[0]?.[0] !== candidateName || sectionAgreement < thresholds.sectionAgreement)
+  ) {
+    return { keyDiagnostics: { ...diagnostics, rejectedBy: 'section' } };
+  }
 
-  const confidence = clamp01(0.2 + best.score * 0.55 + Math.min(0.25, margin * 1.5));
+  const confidence = clamp01(
+    0.16 + best.score * 0.5 + Math.min(0.18, margin * 1.25) + Math.min(0.16, modeMargin * 2),
+  );
   return {
     key: { pitchClass: PITCH_CLASSES[best.tonic]!, tonality: best.tonality },
     keyConfidence: confidence,

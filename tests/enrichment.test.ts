@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { AnalysisCandidate, DataSource, Recording, Release, Track } from '@/domain/types';
-import { scoreIdentity } from '@/enrichment/matching';
+import { sameTrackTitle, scoreIdentity } from '@/enrichment/matching';
 import { applyResolution, candidateConflicts, mergeCandidates, resolveMatches } from '@/enrichment/resolution';
 import { attemptsForRun, runEnrichment } from '@/enrichment/runner';
 import { OpenAnalysisProvider } from '@/enrichment/open-analysis-provider';
@@ -685,5 +685,35 @@ describe('stalled requests', () => {
     });
     controller.abort();
     await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
+  });
+});
+
+/**
+ * Track detail shows candidates for ONE track, but a run stores candidates for
+ * every track on the release. Showing them all invited a DJ to accept another
+ * track's BPM, so the list is filtered on identity.
+ */
+describe('candidate title matching', () => {
+  it('matches the same title regardless of case, accents and punctuation', () => {
+    expect(sameTrackTitle('Original Nuttah', 'original nuttah')).toBe(true);
+    expect(sameTrackTitle('Reachin’ Out', 'Reachin Out')).toBe(true);
+    expect(sameTrackTitle('Bad Ass!', 'Bad  Ass')).toBe(true);
+  });
+
+  it('ignores a trailing bracketed version the sleeve does not print', () => {
+    expect(sameTrackTitle('Sound Murderer (VIP)', 'Sound Murderer')).toBe(true);
+    expect(sameTrackTitle('Terminator (Original Mix) [2004 Remaster]', 'Terminator')).toBe(true);
+  });
+
+  it('does not match a different track that merely starts the same', () => {
+    // The exact mistake the filter exists to prevent: two tracks, one record.
+    expect(sameTrackTitle('Jungle Fever', 'Jungle')).toBe(false);
+    expect(sameTrackTitle('Pulp Fiction', 'Pulp Fiction Part 2')).toBe(false);
+  });
+
+  it('never matches on a missing title', () => {
+    expect(sameTrackTitle(undefined, 'Helicopter')).toBe(false);
+    expect(sameTrackTitle('Helicopter', undefined)).toBe(false);
+    expect(sameTrackTitle('   ', '   ')).toBe(false);
   });
 });

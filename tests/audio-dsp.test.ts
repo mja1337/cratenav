@@ -44,9 +44,35 @@ function tones(freqs: readonly number[], seconds = 8): Float32Array {
   return out;
 }
 
+function tonalSections(sections: readonly (readonly number[])[], secondsEach = 5): Float32Array {
+  const out = new Float32Array(SR * secondsEach * sections.length);
+  const sectionLength = SR * secondsEach;
+  sections.forEach((frequencies, section) => {
+    const start = section * sectionLength;
+    for (let index = 0; index < sectionLength; index += 1) {
+      let value = 0;
+      for (const frequency of frequencies) value += Math.sin((2 * Math.PI * frequency * index) / SR);
+      out[start + index] = value / frequencies.length * 0.5;
+    }
+  });
+  return out;
+}
+
 function whiteNoise(seconds = 8): Float32Array {
   const out = new Float32Array(SR * seconds);
   for (let i = 0; i < out.length; i += 1) out[i] = (Math.random() * 2 - 1) * 0.3;
+  return out;
+}
+
+function mixSignals(...signals: readonly Float32Array[]): Float32Array {
+  const length = Math.max(...signals.map((signal) => signal.length));
+  const out = new Float32Array(length);
+  for (const signal of signals) {
+    for (let index = 0; index < signal.length; index += 1) out[index] = out[index]! + signal[index]!;
+  }
+  let peak = 0;
+  for (const value of out) peak = Math.max(peak, Math.abs(value));
+  if (peak > 0.98) for (let index = 0; index < out.length; index += 1) out[index] = out[index]! / peak * 0.98;
   return out;
 }
 
@@ -132,7 +158,7 @@ describe('key detection', () => {
     // This is the guard that matters most: garbage at high confidence is worse
     // than an honest absence.
     const result = detectKey(whiteNoise(), SR);
-    expect(result.key).toBeUndefined();
+    expect(result.key, JSON.stringify(result.keyDiagnostics)).toBeUndefined();
     expect(result.keyConfidence).toBeUndefined();
   });
 
@@ -171,6 +197,49 @@ describe('key detection', () => {
     const result = detectKey(out, SR, 'drum-and-bass');
     if (result.key) expect(result.key.pitchClass).toBe('A');
     expect(result.keyDiagnostics?.peakCounts?.harmonicsFolded).toBeGreaterThan(0);
+  });
+
+  it('separates a D&B break from sustained harmony before assigning the key', () => {
+    const harmony = tones([110, 261.63, 329.63, 440], 10); // bass A + upper A minor
+    const result = detectKey(mixSignals(harmony, groove(174, 10, 0.01)), SR, 'drum-and-bass');
+    expect(result.key).toEqual({ pitchClass: 'A', tonality: 'minor' });
+    expect(result.keyDiagnostics?.separation?.harmonic).toBeGreaterThan(0);
+    expect(result.keyDiagnostics?.separation?.percussive).toBeGreaterThan(0);
+    expect(
+      result.keyDiagnostics?.rangeEvidence?.bassRoot,
+      JSON.stringify(result.keyDiagnostics),
+    ).toBe('A');
+    expect(result.keyDiagnostics?.rangeEvidence?.upperKey).toBe('A minor');
+    expect(result.keyDiagnostics?.modeMargin).toBeGreaterThanOrEqual(
+      result.keyDiagnostics!.thresholds.modeMargin,
+    );
+  });
+
+  it('keeps major and minor D&B triads distinct after note transcription', () => {
+    const major = detectKey(tones([82.41, 103.83, 123.47], 10), SR, 'drum-and-bass');
+    expect(major.key, JSON.stringify(major.keyDiagnostics)).toEqual({
+      pitchClass: 'E', tonality: 'major',
+    });
+    const minor = detectKey(tones([82.41, 98, 123.47], 10), SR, 'drum-and-bass');
+    expect(minor.key, JSON.stringify(minor.keyDiagnostics)).toEqual({
+      pitchClass: 'E', tonality: 'minor',
+    });
+  });
+
+  it('does not claim a mode when a power interval omits the defining third', () => {
+    const result = detectKey(tones([110, 164.81], 10), SR, 'drum-and-bass'); // A + E only
+    expect(result.key, JSON.stringify(result.keyDiagnostics)).toBeUndefined();
+    expect(['mode', 'margin', 'section', 'correlation']).toContain(result.keyDiagnostics?.rejectedBy);
+  });
+
+  it('does not average two strongly conflicting tonal sections into a confident key', () => {
+    const result = detectKey(tonalSections([
+      [110, 130.81, 164.81], // A minor
+      [92.5, 110, 138.59], // F# minor
+    ]), SR, 'drum-and-bass');
+    expect(result.key, JSON.stringify(result.keyDiagnostics)).toBeUndefined();
+    expect(['section', 'margin', 'mode']).toContain(result.keyDiagnostics?.rejectedBy);
+    expect(result.keyDiagnostics?.sectionVotes?.length).toBeGreaterThan(1);
   });
 });
 
@@ -293,7 +362,7 @@ describe('key diagnostics', () => {
     expect(diagnostics).toBeDefined();
     expect(diagnostics!.rejectedBy).toBeDefined();
     // Even loosened, noise must never be reported as a key.
-    expect(['spread', 'correlation', 'margin', 'no-peaks', 'no-audio']).toContain(
+    expect(['spread', 'correlation', 'margin', 'mode', 'section', 'no-peaks', 'no-audio']).toContain(
       diagnostics!.rejectedBy,
     );
   });
@@ -331,6 +400,7 @@ describe('key diagnostics', () => {
     const diagnostics = detectKey(tones([220, 261.63, 329.63]), SR).keyDiagnostics!;
     expect(diagnostics.thresholds.correlation).toBeGreaterThan(0);
     expect(diagnostics.thresholds.spread).toBeGreaterThan(0);
+    expect(diagnostics.thresholds.modeMargin).toBeGreaterThan(0);
   });
 });
 
