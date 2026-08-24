@@ -44,6 +44,7 @@ export default defineConfig({
       },
       '/api/musicbrainz': metadataProxy('https://musicbrainz.org', '/api/musicbrainz'),
       '/api/acousticbrainz': metadataProxy('https://acousticbrainz.org', '/api/acousticbrainz'),
+      '/api/getsongbpm': metadataProxy('https://api.getsong.co', '/api/getsongbpm'),
     },
   },
   plugins: [

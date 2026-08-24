@@ -4,6 +4,10 @@ A mobile-first PWA for vinyl DJs: collection, crate planning, harmonic mixing an
 
 **Current status: Discogs import, collection browsing, online enrichment, microphone BPM/key analysis, crates, set planning, and pitch-aware harmonic mixing (spec v1.1).**
 
+> **Hosted metadata status:** the GitHub Pages site is a static PWA and currently has no server-side metadata proxy. Use the local production preview for Discogs import and online BPM/key enrichment for now. A narrowly scoped Cloudflare Worker (or equivalent edge proxy) is the intended hosted solution.
+
+Public app: [https://mja1337.github.io/cratenav/](https://mja1337.github.io/cratenav/)
+
 ## What works today
 
 - Installable PWA with a service worker, offline app shell and runtime artwork caching
@@ -83,6 +87,8 @@ npm run typecheck
 npm run build && npm run preview
 ```
 
+For the complete metadata workflow, this is currently the recommended way to run cratenav. Open the loopback URL printed by `npm run preview`; its local-only server supplies the read-only Discogs, MusicBrainz, AcousticBrainz and GetSongBPM proxy routes that a static GitHub Pages site cannot provide. `npm run dev` also proxies these services for development, but the production preview is the closest match to the deployed PWA.
+
 ## Connecting Discogs
 
 1. Open **More → Discogs**.
@@ -130,7 +136,7 @@ AcousticBrainz data is historic automated audio analysis, and GetSongBPM is thir
 
 MusicBrainz asks clients to identify a maintainer as well as respecting its one-call-per-second limit. Enter an email or public project URL in the **MusicBrainz contact** field on Analyse and save it before starting. It stays in this browser's IndexedDB, is excluded from exports, and the same-origin proxy uses it only in cratenav's request identification. `CRATENAV_CONTACT` remains available as an optional server-side fallback, but is no longer required for normal local use.
 
-For GetSongBPM, obtain a key from [the official API page](https://getsongbpm.com/api), enter it in **GetSongBPM API key**, and save it. GetSongBPM requires attribution, so the Analyse screen includes its mandatory backlink. The key stays in this browser's IndexedDB, is excluded from exports, is sent to the local proxy only in the `X-API-KEY` header, and is never placed in a request URL.
+For GetSongBPM, obtain a key from [the official API page](https://getsongbpm.com/api), enter it in **GetSongBPM API key**, and save it. GetSongBPM requires attribution, so cratenav links to and warmly credits the [GetSongBPM service](https://getsongbpm.com/) in the public **More → About** section as well as linking from Analyse. The key stays in this browser's IndexedDB, is excluded from exports, is sent to the local proxy only in the `X-API-KEY` header, and is never placed in a request URL.
 
 ### Microphone BPM and key analysis
 
@@ -159,7 +165,18 @@ For multi-record releases, **Records in this release** on the release page ident
 
 ## Deploying to GitHub Pages
 
-The app is configured for a **project page** at `https://<user>.github.io/cratenav/`. The base path is set in `vite.config.ts`:
+### Current limitation: use local preview for metadata
+
+GitHub Pages serves static files only. It cannot safely add MusicBrainz's required application identification, forward the GetSongBPM API-key header, or work around Discogs' authenticated CORS restrictions. The hosted app therefore remains useful for an already-synced local library, offline browsing, manual entry, microphone analysis and mixing calculations, but **Discogs import and online metadata enrichment should be run locally for now**:
+
+```bash
+npm run build
+npm run preview
+```
+
+Do not place API keys in GitHub Actions variables or bake them into the JavaScript bundle. GetSongBPM and Discogs credentials stay in the user's browser and should pass through a proxy only as request headers.
+
+The app is configured for the project page at `https://mja1337.github.io/cratenav/`. The base path is set in `vite.config.ts`:
 
 ```ts
 const BASE = '/cratenav/';
@@ -189,7 +206,29 @@ Discogs permits some anonymous browser calls but rejects the `Authorization` COR
 
 ### Metadata proxy for a hosted enrichment build
 
-The production bundle deliberately does not call these metadata services directly: a browser cannot provide MusicBrainz with the required application User-Agent, and API credentials should not be sent cross-origin. Set `VITE_METADATA_PROXY_BASE` at build time to a read-only edge endpoint whose `/musicbrainz/*`, `/acousticbrainz/*` and `/getsongbpm/*` routes mirror the local proxy. The GetSongBPM route must forward `X-API-KEY` without logging it. Without a proxy, online enrichment is shown as unavailable while the cached library, manual entry and all mixing calculations continue to work offline.
+The production bundle deliberately does not call these metadata services directly: a browser cannot provide MusicBrainz with the required application User-Agent, and API credentials should not be sent cross-origin. A Cloudflare Worker is a good fit, but it is **not deployed yet**.
+
+The future Worker should expose only read-only `GET` routes matching the local proxy:
+
+| Route | Upstream | Special handling |
+|---|---|---|
+| `/musicbrainz/*` | `https://musicbrainz.org` | Set cratenav's identifying `User-Agent`; accept the sanitised contact header |
+| `/acousticbrainz/*` | `https://acousticbrainz.org` | Public read-only forwarding |
+| `/getsongbpm/*` | `https://api.getsong.co` | Forward `X-API-KEY` only to this upstream; never log it |
+
+It should reject non-GET methods, allow CORS only from the cratenav Pages origin, restrict paths and upstream hosts, strip unrelated credentials, preserve rate-limit responses and avoid caching personalised requests. Discogs can be added as a separately reviewed route if hosted authenticated imports are required.
+
+Once deployed:
+
+1. Add the Worker origin, with no trailing slash, as the GitHub repository variable `VITE_METADATA_PROXY_BASE`.
+2. Re-run the Pages workflow. The workflow already passes that variable into `npm run build`.
+3. Verify `/musicbrainz`, `/acousticbrainz` and `/getsongbpm` from the hosted Analyse screen before treating public enrichment as supported.
+
+Without that variable, the app now explicitly advises running locally while the cached library, manual entry, microphone analysis and all mixing calculations continue to work offline.
+
+## Acknowledgements
+
+Online BPM and key enrichment can use [GetSongBPM](https://getsongbpm.com/). Huge thanks to their team for providing an awesome music-data service and API for projects like cratenav. [Request GetSongBPM API access](https://getsongbpm.com/api).
 
 ## Architecture
 

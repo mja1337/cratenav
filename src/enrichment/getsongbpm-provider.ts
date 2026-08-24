@@ -135,7 +135,8 @@ export class GetSongBpmProvider implements EnrichmentProvider {
     const baseUrl = options.baseUrl ?? providerBase();
     this.available = Boolean(baseUrl);
     if (!this.available) {
-      this.unavailableReason = 'A GetSongBPM metadata proxy is not configured for this deployment.';
+      this.unavailableReason =
+        'This static deployment has no metadata proxy. For full online lookup, run cratenav locally with npm run build && npm run preview, or configure VITE_METADATA_PROXY_BASE to a compliant edge proxy such as a Cloudflare Worker.';
     }
     this.baseUrl = (baseUrl ?? '').replace(/\/$/, '');
   }

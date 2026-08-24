@@ -3,7 +3,7 @@
 Status as of this handover. Written for whoever picks the work up next.
 
 - **Stack**: TypeScript + Vite, no UI framework, **zero runtime dependencies**. Dev deps only: `typescript`, `vite`, `vite-plugin-pwa`, `vitest`, `fake-indexeddb`, `@types/node`.
-- **Size**: 63 TypeScript source modules. Build is 60.88 KB gzipped JS, 260.27 KiB precache.
+- **Size**: 63 TypeScript source modules. Build is 61.19 KB gzipped JS, 261.21 KiB precache.
 - **Tests**: 341 passing across 23 files. `npm test`, `npm run typecheck` and `npm run build` are clean, with no build warnings.
 - **Hosting**: GitHub Pages project page. `base: '/cratenav/'` in `vite.config.ts`; `.github/workflows/deploy.yml` gates deploy on typecheck + tests.
 - **Git**: repo is `git init`'d. **No commit has been made** — the original Claude handover is staged and the 2026-08-24 stabilisation changes are currently unstaged.
@@ -137,6 +137,8 @@ Phase 3 is complete at a provider-independent boundary:
 - AcousticBrainz and GetSongBPM claims carry `verificationRequired`, so even excellent identity evidence cannot promote them directly to READY. Weak matches remain retained candidates for manual inspection.
 - Persisted candidates retain provider/recording IDs, review URL, matched artist/title/version/duration, identity rationale and separate BPM/key confidence. Rechecks replace the same claim; different providers merge across runs, agreements raise confidence, and disagreements become CONFLICT without overwriting the current value.
 - A hosted build only enables enrichment when `VITE_METADATA_PROXY_BASE` supplies compliant read-only MusicBrainz/AcousticBrainz/GetSongBPM routes. The Analyse UI stores a device-local maintainer contact and GetSongBPM key; the proxy uses the former for MusicBrainz request identification and forwards the latter only as `X-API-KEY`. `CRATENAV_CONTACT` is only a server fallback. AcousticBrainz uses its bulk endpoint so absent historic submissions are silent, and local preview retries transient 429/502/503/504 responses. No misleading direct-browser fallback remains.
+- The public GitHub Pages deployment currently has no metadata proxy and must be described as static/offline for those operations. Use `npm run build && npm run preview` for metadata work until a restricted Cloudflare Worker is deployed. The Pages workflow accepts its future origin through the `VITE_METADATA_PROXY_BASE` repository variable; never put API keys in the build environment.
+- More → About and the public README permanently credit and backlink GetSongBPM, including a direct API-access link. Preserve this attribution when changing settings or deployment copy.
 - 34 enrichment/provider tests cover conservative identity matching, digital-version rejection, conflicting sources across runs, corroboration, canonical BPM agreement, provider failure/cancellation, both live adapter mappings, configuration gating, credential isolation and pacing, required request identification, user-verification precedence and application of native/provenance fields.
 
 Additional legal metadata adapters remain optional and can be registered without changing the Analyse view or resolution rules.

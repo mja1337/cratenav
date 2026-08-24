@@ -34,6 +34,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+        env:
+          # Leave unset while Pages is static-only. When a read-only Worker is
+          # deployed, add its origin as the VITE_METADATA_PROXY_BASE repository variable.
+          VITE_METADATA_PROXY_BASE: ${{ vars.VITE_METADATA_PROXY_BASE }}
 
       - uses: actions/configure-pages@v5
 

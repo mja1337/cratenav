@@ -160,7 +160,8 @@ export class OpenAnalysisProvider implements EnrichmentProvider {
     const acousticBrainzBaseUrl = options.acousticBrainzBaseUrl ?? metadataBase('acousticbrainz');
     this.available = Boolean(musicBrainzBaseUrl && acousticBrainzBaseUrl);
     if (!this.available) {
-      this.unavailableReason = 'A compliant metadata proxy is not configured for this deployment.';
+      this.unavailableReason =
+        'This static deployment has no metadata proxy. For full online lookup, run cratenav locally with npm run build && npm run preview, or configure VITE_METADATA_PROXY_BASE to a compliant edge proxy such as a Cloudflare Worker.';
     }
     this.musicBrainzBaseUrl = (musicBrainzBaseUrl ?? '').replace(/\/$/, '');
     this.acousticBrainzBaseUrl = (acousticBrainzBaseUrl ?? '').replace(/\/$/, '');

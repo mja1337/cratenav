@@ -818,6 +818,31 @@ export function createSettingsView(store: Store): View {
     }),
     h('p', {
       class: 'field__hint',
+      text:
+        'The public GitHub Pages build is static and cannot contact metadata services until a compatible proxy is configured. ' +
+        'For full Discogs and BPM/key metadata work today, run cratenav locally with the production preview server.',
+    }),
+    h(
+      'p',
+      { class: 'field__hint' },
+      'Online BPM and key enrichment can use ',
+      h('a', {
+        href: 'https://getsongbpm.com/',
+        target: '_blank',
+        rel: 'noopener',
+        text: 'GetSongBPM',
+      }),
+      '. Huge thanks to their team for making their awesome music-data service available to projects like cratenav. ',
+      h('a', {
+        href: 'https://getsongbpm.com/api',
+        target: '_blank',
+        rel: 'noopener',
+        text: 'Request GetSongBPM API access',
+      }),
+      '.',
+    ),
+    h('p', {
+      class: 'field__hint',
       text: `Device ${store.platform.device.deviceId.slice(0, 8)} / ${store.platform.device.platform}`,
     }),
   );
