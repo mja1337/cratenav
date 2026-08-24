@@ -73,9 +73,10 @@ See README.md for setup and deployment. This file holds the things that are easy
 - GetSongBPM is optional and configuration-gated. Keep its API key device-local, exclude it from
   backup/import, forward it only as `X-API-KEY`, retain the required backlink, pace requests at
   1.25 seconds, and keep every result `verificationRequired`.
-- Preserve the visible GetSongBPM credit/backlink in More → About and the README. The public Pages
-  build has no metadata proxy until `VITE_METADATA_PROXY_BASE` points to a restricted Worker; never
-  imply hosted enrichment works without it or place a user API key in the build environment.
+- Preserve the visible GetSongBPM credit/backlink in More → About and the README, plus the raw-HTML
+  backlinks in `index.html` and `public/getsongbpm.html` for non-JavaScript registration crawlers.
+  The public Pages build has no metadata proxy until `VITE_METADATA_PROXY_BASE` points to a restricted
+  Worker; never imply hosted enrichment works without it or place a user API key in the build environment.
 - Concrete enrichment adapters belong only in `src/enrichment/registry.ts`. Views consume provider
   capabilities, never a named adapter. Candidate refreshes must merge with independent prior
   evidence, retain reviewable recording identity, and keep BPM/key confidence separate.

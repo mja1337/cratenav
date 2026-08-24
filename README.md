@@ -138,6 +138,13 @@ MusicBrainz asks clients to identify a maintainer as well as respecting its one-
 
 For GetSongBPM, obtain a key from [the official API page](https://getsongbpm.com/api), enter it in **GetSongBPM API key**, and save it. GetSongBPM requires attribution, so cratenav links to and warmly credits the [GetSongBPM service](https://getsongbpm.com/) in the public **More → About** section as well as linking from Analyse. The key stays in this browser's IndexedDB, is excluded from exports, is sent to the local proxy only in the `X-API-KEY` header, and is never placed in a request URL.
 
+When requesting GetSongBPM API access for the public cratenav deployment, use these values:
+
+- **Website URL:** `https://mja1337.github.io/cratenav/`
+- **Backlink URL:** `https://mja1337.github.io/cratenav/getsongbpm.html`
+
+Do not submit `https://mja1337.github.io/cratenav/#/settings`. Everything after `#` is a browser-only route and is never sent to the web server or a backlink checker. The backlink URL above is a dedicated static HTML acknowledgement with no JavaScript dependency. The project root also contains the backlink directly in its source HTML, and the full acknowledgement remains visible in **More → About** after the app starts.
+
 ### Microphone BPM and key analysis
 
 Open any track and use **Listen & analyse**. Set the turntable pitch to 0%, allow microphone access, then play a clear 20–60 second section. The first observation appears after roughly six seconds; overlapping observations vote on BPM and key until the reading is stable. Per-window confidence alone never creates a lock, and alternating half/double-tempo readings are called out as ambiguous.
