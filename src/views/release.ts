@@ -12,6 +12,7 @@ import {
   formatRelativeTime,
 } from '@/components/format';
 import { icon } from '@/components/icons';
+import { onlineLookupPanel } from '@/components/online-lookup';
 import { addToBag, removeFromBag, sortBags } from '@/bags/operations';
 import { clear, h } from '@/utils/dom';
 import { deduplicateReferences } from '@/discogs/references';
@@ -61,6 +62,14 @@ export function createReleaseView(store: Store, router: Router, releaseId: strin
       ...(current.hydrationState === 'stub' ? [pendingBanner()] : []),
       ...(current.hydrationState === 'failed' ? [failedBanner(current)] : []),
       detailBlock(current, items),
+      ...(tracks.length
+        ? [
+            onlineLookupPanel(store, {
+              targets: () => store.releaseEntries(current.id),
+              subject: 'this record',
+            }),
+          ]
+        : []),
       tracklistBlock(store, router, current, tracks),
       ...(current.identifiers.length ? [identifiersBlock(current)] : []),
       ...(current.references.length ? [referencesBlock(current)] : []),

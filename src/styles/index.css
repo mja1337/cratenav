@@ -162,7 +162,8 @@ a { color: var(--accent); }
 
 .shell {
   display: grid;
-  grid-template-rows: auto auto 1fr auto;
+  /* header, activity, notice, main, nav */
+  grid-template-rows: auto auto auto 1fr auto;
   min-height: 100dvh;
 }
 
@@ -197,6 +198,22 @@ a { color: var(--accent); }
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+}
+.header__brand {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.32rem;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  font-weight: 650;
+  white-space: nowrap;
+}
+.app-version {
+  color: var(--text-muted);
+  font-size: 0.62rem;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  opacity: 0.72;
 }
 .header__sub {
   display: block;
@@ -1157,14 +1174,16 @@ button.chip[aria-pressed='true'] {
     grid-template-columns: 232px 1fr;
     /* Header must have its own row, or it auto-places into an implicit row
        below the full-height main column and scrolls off screen. */
-    grid-template-rows: auto auto 1fr;
+    grid-template-rows: auto auto auto 1fr;
     grid-template-areas:
       'nav header'
       'nav activity'
+      'nav notice'
       'nav main';
   }
   .header { grid-area: header; }
   .activity { grid-area: activity; }
+  .notice-region { grid-area: notice; }
   .shell__main { grid-area: main; min-height: 0; }
 
   /* Bottom bar becomes a sidebar; desktop is for library management. §29 */
@@ -1189,6 +1208,7 @@ button.chip[aria-pressed='true'] {
     font-weight: 700;
     letter-spacing: -0.02em;
   }
+  .nav__brand .app-version { margin-left: 0.35rem; }
   .nav__item {
     grid-auto-flow: column;
     justify-items: start;
@@ -1268,3 +1288,241 @@ button.chip[aria-pressed='true'] {
   border-radius: var(--radius-lg);
 }
 .dash__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+
+
+/* Global notice region. Sits under the header so a background-operation error
+   is visible on whichever screen the user is on. */
+.notice-region {
+  display: grid;
+  gap: var(--space-2);
+  padding: 0 var(--space-4);
+}
+.notice-region:not(:empty) { padding-top: var(--space-3); }
+.notice-region .banner {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* -------------------------------------------------- live input metering */
+
+/* Level bar. Shape and numbers carry the meaning; colour only reinforces. */
+.signal-meter {
+  position: relative;
+  height: 14px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  overflow: hidden;
+}
+.signal-meter__fill {
+  height: 100%;
+  background: var(--state-ready);
+  border-radius: 999px;
+  transition: width 90ms linear;
+}
+.signal-meter__fill--low { background: var(--state-verify); }
+.signal-meter__fill--clip { background: var(--state-analyse); }
+.signal-meter__hold {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background: var(--text);
+  opacity: 0.65;
+  transition: left 140ms linear;
+}
+
+/* Recent history, newest on the right. */
+.signal-wave {
+  display: flex;
+  align-items: flex-end;
+  gap: 1px;
+  height: 56px;
+  padding: 2px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+.signal-wave__bar {
+  flex: 1 1 0;
+  min-width: 1px;
+  background: var(--accent);
+  border-radius: 1px;
+  opacity: 0.85;
+}
+
+.signal-stats {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.75rem;
+  color: var(--text-faint);
+}
+
+/* ------------------------------------------------ online source outcomes */
+
+.source-outcome {
+  display: grid;
+  gap: 2px;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.source-outcome__name { font-size: 0.875rem; font-weight: 600; }
+.source-outcome__counts {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+/* The error text is the actionable part, so it is not muted away. */
+.source-outcome__error {
+  font-size: 0.75rem;
+  color: var(--state-analyse);
+  overflow-wrap: anywhere;
+}
+.source-outcome__when { font-size: 0.6875rem; color: var(--text-faint); }
+
+/* -------------------------------------------------- library select filters */
+
+.toolbar__selects {
+  display: flex;
+  gap: var(--space-2);
+  align-items: flex-end;
+  flex-wrap: wrap;
+}
+.toolbar__field { display: grid; gap: 2px; min-width: 0; flex: 1 1 150px; }
+.toolbar__label {
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+/* The related-keys toggle sits with the selects, so align it to their baseline. */
+.toolbar__selects > .chip { margin-bottom: 5px; }
+
+@media (min-width: 560px) {
+  .toolbar__field { flex: 0 1 220px; }
+}
+
+/* ------------------------------------------------------------ chroma view */
+
+/* Which pitch classes are actually being heard. The level meter cannot tell
+   "no tonal content" from "tonal content the guards will not commit to". */
+.chroma {
+  display: flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 72px;
+  padding: 2px;
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.chroma__slot {
+  flex: 1 1 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 2px;
+  height: 100%;
+  min-width: 0;
+}
+.chroma__bar {
+  width: 100%;
+  min-height: 2px;
+  background: var(--accent);
+  border-radius: 2px 2px 0 0;
+  opacity: 0.75;
+}
+/* The leading candidate's root, so the reading is traceable to the picture. */
+.chroma__bar--tonic { background: var(--state-ready); opacity: 1; }
+.chroma__name {
+  font-family: var(--font-mono);
+  font-size: 0.5rem;
+  color: var(--text-faint);
+  line-height: 1;
+}
+
+.completion-wheel {
+  --completion: 0deg;
+  width: 42px;
+  height: 42px;
+  flex: 0 0 42px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: conic-gradient(var(--state-ready) var(--completion), var(--bg-sunken) 0);
+  position: relative;
+}
+.completion-wheel::before {
+  content: '';
+  position: absolute;
+  inset: 5px;
+  border-radius: 50%;
+  background: var(--bg-elevated);
+}
+.completion-wheel span { position: relative; z-index: 1; font: 600 0.625rem var(--font-mono); }
+.completion-wheel--saving { animation: completion-spin 900ms linear infinite; }
+@keyframes completion-spin { to { transform: rotate(360deg); } }
+
+.analysis-samples__list { display: grid; gap: 2px; }
+.analysis-sample {
+  display: grid;
+  grid-template-columns: 3rem minmax(7rem, 1fr) minmax(7rem, 1fr);
+  gap: var(--space-2);
+  padding: var(--space-2);
+  border-bottom: 1px solid var(--border);
+  font: 0.75rem var(--font-mono);
+}
+.analysis-sample__number { color: var(--text-faint); }
+.analysis-evidence, .source-comparison {
+  width: 100%;
+  padding: var(--space-3);
+  background: var(--bg-sunken);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.analysis-evidence__block { display: grid; gap: var(--space-2); }
+.analysis-evidence__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-2);
+  font: 0.75rem var(--font-mono);
+}
+.source-comparison__grid {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-1) var(--space-3);
+  align-items: baseline;
+  font-size: 0.8125rem;
+}
+.source-comparison__grid > span { color: var(--text-faint); }
+.candidate-row__comment { width: 100%; margin-top: var(--space-1); }
+.candidate-row__actions { display: flex; gap: var(--space-2); flex-wrap: wrap; align-self: center; }
+
+.suggestion-compare {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--space-2);
+  border-bottom: 1px solid var(--border);
+}
+.suggestion-compare .suggestion { border-bottom: 0; }
+.mix-wheel { align-items: center; padding: var(--space-3); background: var(--bg-sunken); border-radius: var(--radius); }
+.mix-wheel__legend { display: grid; gap: var(--space-1); width: 100%; font-size: 0.8125rem; }
+.mix-wheel__current::before, .mix-wheel__next::before { content: '● '; font-weight: 700; }
+.mix-wheel__current::before { color: var(--accent); }
+.mix-wheel__next::before { color: var(--state-ready); }
+
+@media (max-width: 420px) {
+  .analysis-sample { grid-template-columns: 2.5rem 1fr; }
+  .analysis-sample > :last-child { grid-column: 2; }
+}

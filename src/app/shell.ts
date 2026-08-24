@@ -14,6 +14,7 @@ import { icon, type IconName } from '@/components/icons';
 import { formatCount } from '@/components/format';
 import { progressBar } from '@/components/progress';
 import { clear, h } from '@/utils/dom';
+import { APP_VERSION } from './version';
 
 /**
  * Application shell: header, navigation and the view outlet.
@@ -52,6 +53,12 @@ const NAV_FOR_ROUTE: Record<string, string> = {
 
 export function mountShell(root: HTMLElement, store: Store, router: Router): void {
   const title = h('h1', { class: 'header__title' });
+  const appMark = h(
+    'span',
+    { class: 'header__brand', 'aria-label': `cratenav version ${APP_VERSION}` },
+    h('span', { text: 'cratenav' }),
+    h('small', { class: 'app-version', text: `v${APP_VERSION}` }),
+  );
   const backButton = h(
     'button',
     {
@@ -87,9 +94,34 @@ export function mountShell(root: HTMLElement, store: Store, router: Router): voi
     'header',
     { class: 'header' },
     backButton,
+    appMark,
     title,
     h('div', { class: 'header__actions' }, notationButton, themeButton),
   );
+
+  // Notices are rendered here rather than per-view: an error raised by a
+  // background operation must be visible wherever the user happens to be
+  // standing, not only on the screen that started it.
+  const noticeRegion = h('div', { class: 'notice-region', role: 'status', 'aria-live': 'polite' });
+
+  function renderNotice(): void {
+    const { notice } = store.snapshot;
+    clear(noticeRegion);
+    if (!notice) return;
+    noticeRegion.append(
+      h(
+        'div',
+        { class: `banner banner--${notice.kind}` },
+        h('div', { class: 'banner__body', text: notice.text }),
+        h('button', {
+          class: 'button button--small button--ghost',
+          type: 'button',
+          text: 'Dismiss',
+          onclick: () => store.clearNotice(),
+        }),
+      ),
+    );
+  }
 
   const outlet = h('main', { class: 'shell__main', id: 'main', tabindex: '-1' });
   const activity = h('aside', {
@@ -101,7 +133,14 @@ export function mountShell(root: HTMLElement, store: Store, router: Router): voi
 
   const nav = h('nav', { class: 'nav', 'aria-label': 'Main' });
   const navLinks = new Map<string, HTMLAnchorElement>();
-  nav.append(h('span', { class: 'nav__brand', text: 'cratenav' }));
+  nav.append(
+    h(
+      'span',
+      { class: 'nav__brand' },
+      'cratenav',
+      h('small', { class: 'app-version', text: `v${APP_VERSION}` }),
+    ),
+  );
   for (const item of NAV_ITEMS) {
     const link = h(
       'a',
@@ -113,7 +152,7 @@ export function mountShell(root: HTMLElement, store: Store, router: Router): voi
     nav.append(link);
   }
 
-  const shell = h('div', { class: 'shell' }, header, activity, outlet, nav);
+  const shell = h('div', { class: 'shell' }, header, activity, noticeRegion, outlet, nav);
   clear(root);
   root.removeAttribute('aria-busy');
   root.append(shell);
@@ -283,9 +322,11 @@ export function mountShell(root: HTMLElement, store: Store, router: Router): voi
   }
 
   refreshHeaderChrome();
+  renderNotice();
   store.subscribeOperations(renderActivity);
   store.subscribe(() => {
     refreshHeaderChrome();
+    renderNotice();
     // Keep the header count fresh after a sync without a full re-render.
     if (router.route.name === 'library') {
       const releases = store.ownedReleases;

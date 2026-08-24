@@ -15,6 +15,8 @@ export function recommendationList(
   recommendations: readonly Recommendation[],
   notation: KeyNotation,
   onSelect: (recommendation: Recommendation) => void,
+  onCompare?: (recommendation: Recommendation) => void,
+  comparedTrackId?: string,
 ): HTMLElement {
   if (!recommendations.length) {
     return h('p', {
@@ -34,7 +36,7 @@ export function recommendationList(
       // Only surface pitch figures when a tempo was actually known.
       const pitch = recommendation.pitch?.tempoKnown ? recommendation.pitch : undefined;
 
-      return h(
+      const open = h(
         'button',
         {
           class: 'suggestion',
@@ -92,6 +94,20 @@ export function recommendationList(
             : null,
         ),
       );
+      return onCompare
+        ? h(
+            'div',
+            { class: 'suggestion-compare' },
+            open,
+            h('button', {
+              class: 'button button--small',
+              type: 'button',
+              'aria-pressed': String(comparedTrackId === entry.track.id),
+              text: comparedTrackId === entry.track.id ? 'Shown on wheel' : 'Show on wheel',
+              onclick: () => onCompare(recommendation),
+            }),
+          )
+        : open;
     }),
   );
 }

@@ -6,9 +6,10 @@ export function hasUnconfirmedAnalysis(analysis: TrackAnalysis | undefined): boo
   if (analysis.canonicalBpm !== undefined && !analysis.verifiedBpm) return true;
   if ((analysis.canonicalKey || analysis.camelotKey) && !analysis.verifiedKey) return true;
 
-  return analysis.candidates.some((candidate) =>
+  return analysis.candidates.some((candidate) => candidate.reviewStatus !== 'rejected' && (
     (candidate.canonicalBpm !== undefined && !analysis.verifiedBpm) ||
     ((candidate.canonicalKey !== undefined || candidate.camelotKey !== undefined) &&
-      !analysis.verifiedKey),
+      !analysis.verifiedKey)
+  ),
   );
 }

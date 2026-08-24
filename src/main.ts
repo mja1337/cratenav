@@ -5,6 +5,7 @@ import { mountShell } from '@/app/shell';
 import { createBrowserPlatform } from '@/storage/platform';
 import { h } from '@/utils/dom';
 import { registerServiceWorker } from '@/app/service-worker';
+import { startAutomaticBackup } from '@/app/automatic-backup';
 
 /**
  * Bootstrap.
@@ -21,6 +22,7 @@ async function boot(): Promise<void> {
 
     const platform = createBrowserPlatform();
     const store = await Store.create(platform);
+    void startAutomaticBackup(store);
 
     applyTheme(store.snapshot.settings.theme);
 

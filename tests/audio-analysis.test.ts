@@ -88,4 +88,37 @@ describe('local audio analysis', () => {
     expect(result.stable).toBe(false);
     expect(result.keyBand).toBe('UNSTABLE');
   });
+
+  it('does not publish a D&B key from the first few notes', () => {
+    const frames: AnalysisFrame[] = Array.from({ length: 4 }, (_, index) => ({
+      at: index * 2_000,
+      key: { pitchClass: 'F', tonality: 'minor' },
+      keyConfidence: 0.9,
+      bpmDiagnostics: {
+        profile: 'drum-and-bass', bands: [], candidates: [], agreement: 1,
+      },
+    }));
+    const result = aggregateFrames(frames);
+    expect(result.key?.pitchClass).toBe('F'); // retained as a diagnostic candidate
+    expect(result.keyBand).toBe('UNSTABLE'); // not presented as the final key
+    expect(result.stable).toBe(false);
+  });
+
+  it('lets sustained D&B evidence outweigh an inaccurate intro key', () => {
+    const keys = [
+      ...Array.from({ length: 4 }, () => ({ pitchClass: 'C' as const, tonality: 'major' as const })),
+      ...Array.from({ length: 8 }, () => ({ pitchClass: 'F' as const, tonality: 'minor' as const })),
+    ];
+    const frames: AnalysisFrame[] = keys.map((key, index) => ({
+      at: index * 2_000,
+      key,
+      keyConfidence: 0.88,
+      bpmDiagnostics: {
+        profile: 'drum-and-bass', bands: [], candidates: [], agreement: 1,
+      },
+    }));
+    const result = aggregateFrames(frames);
+    expect(result.key).toEqual({ pitchClass: 'F', tonality: 'minor' });
+    expect(result.keyBand).not.toBe('UNSTABLE');
+  });
 });

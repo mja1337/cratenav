@@ -23,12 +23,198 @@ export function createSettingsView(store: Store): View {
 
   const progressSlot = h('div', { class: 'stack stack--tight' });
   const statsSlot = h('div', { class: 'stack stack--tight' });
-  const noticeSlot = h('div');
 
   let failedCount = 0;
   let busy = store.sync.running;
   let connectionBusy = false;
   let connectionStatus: string | undefined;
+  const backup = store.platform.backup;
+  const googleDrive = store.platform.googleDriveBackup;
+  const googleDriveSlot = h('div', { class: 'stack stack--tight' });
+  const backupSlot = h('div', { class: 'stack stack--tight' });
+
+  function renderGoogleDriveBackup(): void {
+    clear(googleDriveSlot);
+    if (!googleDrive?.status.available) {
+      googleDriveSlot.append(
+        h('div', { class: 'stack stack--tight' },
+          h('h3', { class: 'section-title', text: 'Google Drive backup' }),
+          h('p', {
+            class: 'notice notice--warning',
+            text:
+              'Google Drive backup is not configured in this build. Add VITE_GOOGLE_DRIVE_CLIENT_ID when building CrateNav; manual export remains available.',
+          }),
+        ),
+      );
+      return;
+    }
+
+    const status = googleDrive.status;
+    const saved = formatRelativeTime(status.lastSavedAt);
+    googleDriveSlot.append(
+      h('div', { class: 'stack stack--tight' },
+        h('h3', { class: 'section-title', text: 'Google Drive backup' }),
+        h('p', {
+          class: 'field__hint',
+          text:
+            'Works in supported Mac, Android and mobile browsers. Connect once per app session; CrateNav then maintains one visible JSON backup in My Drive while local IndexedDB remains the live database.',
+        }),
+        h('p', {
+          class: status.error ? 'notice notice--warning' : 'field__hint',
+          text: status.error
+            ? `Drive backup: ${status.error}`
+            : status.connected
+              ? status.hasBackup
+                ? `${status.fileName} · ${status.saving ? 'saving…' : saved ? `last saved ${saved}` : 'backup found'} · ${status.automatic ? 'automatic updates on' : 'choose restore or back up'}`
+                : 'Connected · no existing CrateNav backup found'
+              : 'Not connected for this session.',
+        }),
+        h('div', { class: 'row row--wrap' },
+          !status.connected
+            ? h('button', {
+                class: 'button button--primary',
+                type: 'button',
+                text: 'Connect Google Drive',
+                onclick: async () => {
+                  if (await googleDrive.connect()) {
+                    store.notify(
+                      'info',
+                      googleDrive.status.hasBackup
+                        ? 'Google Drive connected. An existing backup was found; restore it or keep this device’s local library.'
+                        : 'Google Drive connected. No existing CrateNav backup was found.',
+                    );
+                  }
+                },
+              })
+            : h('button', {
+                class: 'button',
+                type: 'button',
+                text: status.saving ? 'Saving…' : 'Back up to Drive now',
+                disabled: status.saving,
+                onclick: async () => {
+                  const ok = await googleDrive.write(await exportLibrary());
+                  store.notify(ok ? 'info' : 'warning', ok ? 'Google Drive backup updated.' : 'Google Drive backup failed.');
+                },
+              }),
+          status.connected
+            ? h('button', {
+                class: 'button button--small',
+                type: 'button',
+                text: 'Restore from Drive',
+                disabled: status.saving,
+                onclick: async () => {
+                  const json = await googleDrive.read();
+                  if (!json) {
+                    store.notify('warning', 'No CrateNav backup was found in this Google Drive.');
+                    return;
+                  }
+                  try {
+                    const report = await importLibrary(json);
+                    await store.reload();
+                    await refreshStats();
+                    renderActions();
+                    const backedUp = await googleDrive.write(await exportLibrary());
+                    store.notify(
+                      report.warnings.length || !backedUp ? 'warning' : 'info',
+                      `Drive restore merged ${report.added} added, ${report.updated} updated and ${report.skipped} already-current records.` +
+                        (report.warnings.length ? ` ${report.warnings.join(' ')}` : '') +
+                        (!backedUp ? ' The merged library could not be written back to Drive.' : ' Automatic updates are now on.'),
+                    );
+                  } catch (error) {
+                    store.notify('error', error instanceof Error ? error.message : 'Drive restore failed.');
+                  }
+                },
+              })
+            : null,
+          status.connected
+            ? h('button', {
+                class: 'button button--small button--ghost',
+                type: 'button',
+                text: 'Disconnect Drive session',
+                onclick: () => googleDrive.disconnect(),
+              })
+            : null,
+        ),
+      ),
+    );
+  }
+
+  function renderBackup(): void {
+    clear(backupSlot);
+    if (!backup?.status.supported) {
+      if (!googleDrive?.status.available) {
+        backupSlot.append(h('p', {
+          class: 'notice notice--warning',
+          text:
+            'Automatic file backup is not supported by this browser. Manual JSON export still works; Chrome or Edge can maintain a selected backup file.',
+        }));
+      }
+      return;
+    }
+
+    const status = backup.status;
+    const saved = formatRelativeTime(status.lastSavedAt);
+    const permissionNote = status.configured && status.permission !== 'granted'
+      ? ' Browser permission needs renewing; use Back up now.'
+      : '';
+    backupSlot.append(
+      h('div', { class: 'stack stack--tight' },
+        h('h3', { class: 'section-title', text: 'Mac synced-folder backup' }),
+        h('p', {
+          class: 'field__hint',
+          text:
+            'Choose cratenav-library-backup.json inside a Google Drive for desktop folder. CrateNav keeps that copy updated after local changes; the live database remains in this browser and no Google API is used.',
+        }),
+        h('p', {
+          class: status.error ? 'notice notice--warning' : 'field__hint',
+          text: status.error
+            ? `Backup problem: ${status.error}`
+            : status.configured
+              ? `${status.fileName ?? 'Backup file'} · ${status.saving ? 'saving…' : saved ? `last saved ${saved}` : 'ready'}${permissionNote}`
+              : 'No automatic backup file selected.',
+        }),
+        h('div', { class: 'row row--wrap' },
+          h('button', {
+            class: 'button',
+            type: 'button',
+            text: status.configured ? 'Change backup file' : 'Choose backup file',
+            disabled: status.saving,
+            onclick: async () => {
+              const ok = await backup.choose(await exportLibrary());
+              if (ok) store.notify('info', 'Backup file connected and saved.');
+            },
+          }),
+          status.configured
+            ? h('button', {
+                class: 'button button--small',
+                type: 'button',
+                text: status.saving ? 'Saving…' : 'Back up now',
+                disabled: status.saving,
+                onclick: async () => {
+                  const ok = await backup.write(await exportLibrary(), true);
+                  store.notify(
+                    ok ? 'info' : 'warning',
+                    ok ? 'Backup file updated.' : 'Backup permission was not granted.',
+                  );
+                },
+              })
+            : null,
+          status.configured
+            ? h('button', {
+                class: 'button button--small button--ghost',
+                type: 'button',
+                text: 'Disconnect backup',
+                disabled: status.saving,
+                onclick: async () => {
+                  await backup.disconnect();
+                  store.notify('info', 'Automatic backup disconnected. The existing JSON file was not deleted.');
+                },
+              })
+            : null,
+        ),
+      ),
+    );
+  }
 
   // --- Discogs account ------------------------------------------------------
 
@@ -382,17 +568,8 @@ export function createSettingsView(store: Store): View {
     renderActions();
   });
 
-  const unsubscribeStore = store.subscribe((state) => {
-    clear(noticeSlot);
-    if (state.notice) {
-      noticeSlot.append(
-        h(
-          'div',
-          { class: `banner banner--${state.notice.kind}` },
-          h('div', { class: 'banner__body', text: state.notice.text }),
-        ),
-      );
-    }
+  const unsubscribeStore = store.subscribe(() => {
+    // Notices are rendered globally by the shell; nothing to do here.
     void refreshStats();
     renderActions();
   });
@@ -741,6 +918,8 @@ export function createSettingsView(store: Store): View {
         'Everything lives in this browser. Export a full JSON backup at any time, and import one to restore. ' +
         'An import merges by version, so it never overwrites newer local work.',
     }),
+    googleDriveSlot,
+    backupSlot,
     h(
       'div',
       { class: 'row row--wrap' },
@@ -814,7 +993,7 @@ export function createSettingsView(store: Store): View {
       text:
         'cratenav is local-first: the collection lives in this browser and works offline once synced. ' +
         'Collection import, online enrichment, microphone analysis, crates, set plans and pitch-aware planning are ready. ' +
-        'Additional providers, file/USB analysis, Live mode and cloud sync are not wired in yet.',
+        'Google Drive and synced-folder backups are available; Live mode is not wired in yet.',
     }),
     h('p', {
       class: 'field__hint',
@@ -848,7 +1027,6 @@ export function createSettingsView(store: Store): View {
   );
 
   element.append(
-    noticeSlot,
     statsSlot,
     discogsCard,
     deckCard,
@@ -864,12 +1042,16 @@ export function createSettingsView(store: Store): View {
 
   void refreshStats();
   renderActions();
+  const unsubscribeGoogleDrive = googleDrive?.subscribe(renderGoogleDriveBackup) ?? (() => undefined);
+  const unsubscribeBackup = backup?.subscribe(renderBackup) ?? (() => undefined);
 
   return {
     element,
     destroy: () => {
       unsubscribeProgress();
       unsubscribeStore();
+      unsubscribeGoogleDrive();
+      unsubscribeBackup();
     },
   };
 }

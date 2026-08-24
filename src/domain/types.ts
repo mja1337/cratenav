@@ -254,6 +254,10 @@ export interface AnalysisCandidate {
   /** Why the BPM was transformed, e.g. "doubled for D&B range". */
   normalisationReason?: string;
   matchScore?: number;
+  /** Human adjudication of this exact source claim. */
+  reviewStatus?: 'approved' | 'rejected';
+  reviewComment?: string;
+  reviewedAt?: string;
 }
 
 export interface EnrichmentAttempt {
@@ -316,6 +320,22 @@ export interface TrackAnalysis extends Syncable {
   energy?: number;
   tags?: string[];
   mixNotes?: string;
+
+  /** Compact evidence retained from the most recently accepted local capture. */
+  localAnalysisEvidence?: {
+    profile: 'general' | 'drum-and-bass';
+    capturedSeconds: number;
+    frameCount: number;
+    rhythmicFrames: number;
+    tonalWindows: number;
+    localBpm?: number;
+    localKey?: MusicalKey;
+    sourceBpm?: number;
+    sourceKey?: MusicalKey;
+    bpmAgreed?: boolean;
+    keyAgreed?: boolean;
+    acceptedAt: string;
+  };
 }
 
 // ---------------------------------------------------------------------------

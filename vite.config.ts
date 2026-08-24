@@ -13,6 +13,11 @@ function metadataProxy(target: string, prefix: string): ProxyOptions {
     changeOrigin: true,
     rewrite: (path) => path.replace(new RegExp(`^${prefix}`), ''),
     headers: { 'User-Agent': METADATA_USER_AGENT },
+    // Bound the upstream leg too. Without these a dead socket leaves the
+    // browser request open indefinitely, which is indistinguishable from the
+    // app freezing.
+    timeout: 20_000,
+    proxyTimeout: 20_000,
     configure(proxy) {
       proxy.on('proxyReq', (proxyRequest, request) => {
         const header = request.headers['x-cratenav-contact'];
@@ -20,6 +25,23 @@ function metadataProxy(target: string, prefix: string): ProxyOptions {
         const contact = raw?.replace(/[\r\n]/g, ' ').trim().slice(0, 200);
         if (contact) proxyRequest.setHeader('User-Agent', `cratenav/0.1 (${contact})`);
         proxyRequest.removeHeader('X-Cratenav-Contact');
+      });
+
+      // Report WHY the proxy leg failed. The default is an empty 500 body,
+      // which tells the app nothing and cost real debugging time.
+      proxy.on('error', (error, _request, response) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        console.error(`[metadata proxy] ${target} -> ${detail}`);
+        const socket = response as unknown as { writableEnded?: boolean };
+        if ('writeHead' in response && !socket.writableEnded) {
+          (response as unknown as {
+            writeHead: (status: number, headers: Record<string, string>) => void;
+            end: (body: string) => void;
+          }).writeHead(502, { 'content-type': 'application/json; charset=utf-8' });
+          (response as unknown as { end: (body: string) => void }).end(
+            JSON.stringify({ error: `Metadata proxy could not reach ${target}: ${detail}` }),
+          );
+        }
       });
     },
   };

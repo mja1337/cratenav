@@ -103,6 +103,34 @@ export interface BulkOperation {
 
 export type BulkOperations = Partial<Record<BulkOperationKind, BulkOperation>>;
 
+/** Hard ceiling for one track's providers, including their own retries. */
+const TRACK_WATCHDOG_MS = 60_000;
+
+/**
+ * Reject if a single track's lookup outlives the watchdog.
+ *
+ * A user Stop is left to propagate as an abort; only a genuine stall is turned
+ * into a failure, so the batch records it and continues.
+ */
+function withTrackWatchdog<T>(work: Promise<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
+    const timer = setTimeout(() => {
+      if (signal.aborted) return;
+      reject(new Error('Lookup stalled for this track and was abandoned.'));
+    }, TRACK_WATCHDOG_MS);
+    work.then(
+      (value) => {
+        clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
+}
+
 function playStateKey(bagId: string, trackId: string): string {
   return `${bagId}::${trackId}`;
 }
@@ -403,6 +431,8 @@ export class Store {
     let consecutiveErrors = 0;
     let stoppedForErrors = false;
     let unexpectedFailure = false;
+    let storageFailed = false;
+    let lastError: string | undefined;
 
     const publish = () => this.setOperation('enrichment', {
       kind: 'enrichment',
@@ -423,30 +453,77 @@ export class Store {
         controller.signal.throwIfAborted();
         const adapters = adaptersFor(entry);
         const attemptedAt = nowIso();
-        const run = await runEnrichment(
-          {
-            track: entry.track,
-            release: entry.release,
-            siblings: this.tracksFor(entry.release.id),
-          },
-          adapters,
-          { signal: controller.signal, ...lookupOptions },
-        );
-        const allFailed = run.failures.length === adapters.length;
-        progress.errors += run.failures.length;
-        if (allFailed) {
+
+        // One track must never be able to end the batch. Provider errors are
+        // already handled inside runEnrichment, but resolution and the
+        // IndexedDB write sit outside it, and a single failure there used to
+        // escape and kill a thousand-track run with no visible reason.
+        try {
+          // Belt and braces over the per-request timeouts in the providers.
+          // This is an unattended batch of a thousand rows, so no single track
+          // may be able to wedge it: whatever stalls, the row fails and the
+          // run moves on.
+          const run = await withTrackWatchdog(
+            runEnrichment(
+              {
+                track: entry.track,
+                release: entry.release,
+                siblings: this.tracksFor(entry.release.id),
+              },
+              adapters,
+              { signal: controller.signal, ...lookupOptions },
+            ),
+            controller.signal,
+          );
+          const allFailed = run.failures.length === adapters.length;
+          progress.errors += run.failures.length;
+          if (run.failures.length) {
+            lastError = run.failures
+              .map((failure) => `${failure.providerName}: ${failure.message}`)
+              .join(' | ');
+          }
+          if (allFailed) {
+            consecutiveErrors += 1;
+          } else if (run.resolution.candidates.length) {
+            consecutiveErrors = 0;
+            progress.found += 1;
+          } else {
+            consecutiveErrors = 0;
+            progress.none += 1;
+          }
+          await this.applyEnrichment(entry.track.id, run.resolution, {
+            reload: false,
+            attempts: attemptsForRun(run, attemptedAt),
+          });
+        } catch (error) {
+          // Abort is a user action, not a failure: let it out.
+          if (controller.signal.aborted || (error as Error)?.name === 'AbortError') throw error;
           consecutiveErrors += 1;
-        } else if (run.resolution.candidates.length) {
-          consecutiveErrors = 0;
-          progress.found += 1;
-        } else {
-          consecutiveErrors = 0;
-          progress.none += 1;
+          progress.errors += 1;
+          lastError = error instanceof Error ? error.message : String(error);
+          // Record the failure durably so a retry can find this row again.
+          try {
+            await this.applyEnrichment(
+              entry.track.id,
+              { state: 'ANALYSE', candidates: [], conflicts: { bpm: false, key: false }, reason: lastError },
+              {
+                reload: false,
+                attempts: adapters.map((provider) => ({
+                  provider: provider.id,
+                  attemptedAt,
+                  outcome: 'error' as const,
+                  message: lastError,
+                })),
+              },
+            );
+          } catch {
+            // If even the checkpoint cannot be written, storage itself is the
+            // problem. Stop rather than spin through every remaining track.
+            storageFailed = true;
+            break;
+          }
         }
-        await this.applyEnrichment(entry.track.id, run.resolution, {
-          reload: false,
-          attempts: attemptsForRun(run, attemptedAt),
-        });
+
         progress.current += 1;
         publish();
 
@@ -465,12 +542,27 @@ export class Store {
       this.enrichmentController = undefined;
       this.setOperation('enrichment', undefined);
       await this.reload();
-      if (stoppedForErrors) {
-        this.notify('warning', 'Online lookup stopped after three service errors. Error rows remain queued for retry.');
+      if (storageFailed) {
+        this.notify(
+          'error',
+          `Stopped: this device could not save results${lastError ? ` (${lastError})` : ''}. ` +
+            'Local storage may be full. Export a backup, then clear space before continuing.',
+        );
+      } else if (stoppedForErrors) {
+        this.notify(
+          'warning',
+          'Online lookup stopped after three consecutive errors. Error rows remain queued for retry.' +
+            (lastError ? ` Last error: ${lastError}` : ''),
+        );
       } else if (paused) {
         this.notify('info', `Paused after ${progress.current} tracks. Progress has been saved.`);
       } else if (!unexpectedFailure) {
-        this.notify('info', `${progress.found} online ${progress.found === 1 ? 'match' : 'matches'} found. All results need verification.`);
+        this.notify(
+          'info',
+          `${progress.found} online ${progress.found === 1 ? 'match' : 'matches'} found` +
+            `${progress.errors ? `, ${progress.errors} errors` : ''}. All results need verification.` +
+            (progress.errors && lastError ? ` Last error: ${lastError}` : ''),
+        );
       }
     }
   }
@@ -676,6 +768,35 @@ export class Store {
   /** Which collection items are in a bag, for the picker. */
   bagItemIds(bag: Bag): Set<string> {
     return new Set(bag.collectionItemIds);
+  }
+
+  /**
+   * One track as an enrichment/recommendation target.
+   *
+   * Views need this to run a lookup for a single row without reaching into the
+   * library snapshot and rebuilding the shape themselves.
+   */
+  trackEntry(trackId: string): BagTrack | undefined {
+    const track = this.getTrack(trackId);
+    if (!track) return undefined;
+    const release = this.getRelease(track.releaseId);
+    if (!release) return undefined;
+    return {
+      track,
+      release,
+      analysis: this.state.library.analysisByTrack.get(track.id),
+    };
+  }
+
+  /** Every track on one release, for a record-by-record lookup. */
+  releaseEntries(releaseId: string): BagTrack[] {
+    const release = this.getRelease(releaseId);
+    if (!release) return [];
+    return (this.state.library.tracksByRelease.get(release.id) ?? []).map((track) => ({
+      track,
+      release,
+      analysis: this.state.library.analysisByTrack.get(track.id),
+    }));
   }
 
   /** Every track in the library, for the explicit full-collection scope. */

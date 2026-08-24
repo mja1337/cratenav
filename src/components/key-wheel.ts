@@ -23,6 +23,8 @@ import { compareKeys, compatibleKeys } from '@/harmonic/compatibility';
 export interface KeyWheelOptions {
   /** The key to centre the harmonic relationships on. */
   selected?: CamelotKey | undefined;
+  /** A second track to compare against the selected/current key. */
+  comparison?: CamelotKey | undefined;
   notation: KeyNotation;
   /** Called when a segment is activated. */
   onSelect?: (key: CamelotKey) => void;
@@ -185,6 +187,7 @@ export function keyWheel(options: KeyWheelOptions): SVGSVGElement {
       const endAngle = startAngle + segmentAngle;
 
       const isSelected = camelotEquals(options.selected, key);
+      const isComparison = camelotEquals(options.comparison, key);
       const relation = options.selected ? compareKeys(options.selected, key) : null;
       const isCompatible =
         !isSelected && compatible.some((candidate) => camelotEquals(candidate, key));
@@ -214,12 +217,14 @@ export function keyWheel(options: KeyWheelOptions): SVGSVGElement {
           'fill',
           isSelected
             ? 'var(--accent)'
+            : isComparison
+              ? 'var(--state-ready)'
             : isCompatible
               ? 'var(--accent-soft)'
               : 'var(--bg-raised-2)',
         );
-        path.setAttribute('stroke', isSelected || isCompatible ? 'var(--accent)' : 'var(--border)');
-        path.setAttribute('stroke-width', isSelected ? '2' : '1');
+        path.setAttribute('stroke', isSelected || isCompatible ? 'var(--accent)' : isComparison ? 'var(--state-ready)' : 'var(--border)');
+        path.setAttribute('stroke-width', isSelected || isComparison ? '3' : '1');
       }
       group.append(path);
 
@@ -240,6 +245,8 @@ export function keyWheel(options: KeyWheelOptions): SVGSVGElement {
             : 'var(--text-faint)'
           : isSelected
             ? 'var(--accent-ink)'
+            : isComparison
+              ? 'var(--bg)'
             : isCompatible
               ? 'var(--accent)'
               : 'var(--text-muted)',
@@ -255,7 +262,9 @@ export function keyWheel(options: KeyWheelOptions): SVGSVGElement {
       const description = isCoverage
         ? `${accessibleName(key)}: ${count ?? 0} ${count === 1 ? 'track' : 'tracks'}`
         : isSelected
-          ? `${accessibleName(key)}, current key`
+          ? `${accessibleName(key)}, current key${isComparison ? ' and compared track' : ''}`
+          : isComparison
+            ? `${accessibleName(key)}, compared track key`
           : isCompatible
             ? `${accessibleName(key)}, compatible (${relation?.label ?? ''})`
             : accessibleName(key);

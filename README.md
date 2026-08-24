@@ -30,13 +30,13 @@ Public app: [https://mja1337.github.io/cratenav/](https://mja1337.github.io/crat
 - **Sticker Run**: giant native key + BPM for copying onto physical labels, with Camelot colour convention
 - **Dashboard**: collection and bag summary with quick actions, on the library's resting state
 - Library filters: style, needs metadata, needs analysis, verified, active-bag membership, tempo band
-- **Library import**: restore a JSON backup, merged by version so it never overwrites newer local work
+- **Backups**: Google Drive backup/restore across Mac and mobile, optional Mac synced-folder backup, and portable JSON import/export
 - Play state per bag: packed / played / favourite / put aside
 - Dark and light themes, keyboard accessible, no state signalled by colour alone
 
 ## Not built yet
 
-Additional corroborating providers, local-file/USB analysis, live/B2B mode and Google Drive sync are modelled in the data layer but not yet implemented.
+Additional corroborating providers, local-file analysis and live/B2B mode are modelled in the data layer but not yet implemented.
 
 ## Vinyl pitch awareness (spec v1.1)
 
@@ -86,6 +86,21 @@ npm run typecheck
 ```bash
 npm run build && npm run preview
 ```
+
+## Google Drive backup
+
+CrateNav can keep one visible `cratenav-library-backup.json` file in Google Drive and restore it on another Mac or mobile device. IndexedDB remains the live database; Drive is only a portable backup. Credentials and API keys are excluded from the JSON.
+
+Google Drive for desktop can also maintain a user-selected JSON file on macOS without any API. Android and other mobile browsers cannot continuously write to that desktop-synced folder, so cross-platform backup uses Google OAuth and the Drive API.
+
+One-time app setup:
+
+1. In Google Cloud Console, enable the Google Drive API and configure an OAuth consent screen.
+2. Create an OAuth 2.0 **Web application** client.
+3. Add every app origin you use under **Authorized JavaScript origins**, for example `http://127.0.0.1:4174` and `https://mja1337.github.io`.
+4. Put the public client ID in `.env.local` as `VITE_GOOGLE_DRIVE_CLIENT_ID=...`, then rebuild. For GitHub Pages, add the same value as the repository variable `VITE_GOOGLE_DRIVE_CLIENT_ID`.
+
+Open **More → Your data → Google Drive backup** and connect. The app requests only the `drive.file` scope, which limits it to files CrateNav created or that were explicitly opened with CrateNav. With no backend, Google requires a user click to reconnect after a browser session/token expires; backups are automatic while connected. A backend authorization-code flow would be required for unattended backups between sessions.
 
 For the complete metadata workflow, this is currently the recommended way to run cratenav. Open the loopback URL printed by `npm run preview`; its local-only server supplies the read-only Discogs, MusicBrainz, AcousticBrainz and GetSongBPM proxy routes that a static GitHub Pages site cannot provide. `npm run dev` also proxies these services for development, but the production preview is the closest match to the deployed PWA.
 

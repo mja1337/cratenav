@@ -109,6 +109,64 @@ export interface ProviderConfiguration {
   value(settings: Settings): string;
 }
 
+/** Default ceiling for a single metadata request. */
+export const REQUEST_TIMEOUT_MS = 15_000;
+
+export interface RequestGate {
+  signal: AbortSignal;
+  /** True when the ceiling fired rather than the caller cancelling. */
+  timedOut(): boolean;
+  release(): void;
+}
+
+/**
+ * Bound one request in time while still honouring the run's own cancellation.
+ *
+ * Without a ceiling a stalled request never settles, so `runEnrichment` never
+ * returns and a thousand-track batch sits on its first row forever showing no
+ * progress and no error. A timeout must stay distinguishable from a user Stop:
+ * the first is a provider failure the batch should record and move past, the
+ * second has to propagate so the loop actually ends.
+ */
+export function withTimeout(
+  signal: AbortSignal | undefined,
+  ms: number = REQUEST_TIMEOUT_MS,
+): RequestGate {
+  const controller = new AbortController();
+  let expired = false;
+
+  const timer = setTimeout(() => {
+    expired = true;
+    controller.abort();
+  }, ms);
+
+  const onAbort = () => controller.abort();
+  if (signal?.aborted) controller.abort();
+  else signal?.addEventListener('abort', onAbort, { once: true });
+
+  return {
+    signal: controller.signal,
+    timedOut: () => expired,
+    release: () => {
+      clearTimeout(timer);
+      signal?.removeEventListener('abort', onAbort);
+    },
+  };
+}
+
+/**
+ * Coerce an untrusted response field to an array.
+ *
+ * A `as SomeResponse` cast is an assertion, not a check: it says nothing about
+ * what the service actually sent. GetSongBPM returns `{"search": {"error": …}}`
+ * on a miss, so `response.search ?? []` left a plain object in place and the
+ * following `.map` threw — turning "no result" into a crash that stopped the
+ * whole batch. Every provider must funnel list fields through here.
+ */
+export function asArray<T>(value: unknown): T[] {
+  return Array.isArray(value) ? (value as T[]) : [];
+}
+
 export interface EnrichmentProvider {
   readonly id: string;
   readonly name: string;

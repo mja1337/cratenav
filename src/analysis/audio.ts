@@ -11,6 +11,28 @@ import { musicalKeyToCamelot } from '@/harmonic/camelot';
 
 export type AudioSourceKind = 'microphone' | 'file' | 'usb' | 'native';
 
+/** Browser-visible capture device for the microphone picker. */
+export interface AudioInputDevice {
+  id: string;
+  label: string;
+}
+
+/**
+ * Enumerate microphone/line inputs without leaking browser MediaDeviceInfo
+ * shapes into the UI. Labels are intentionally allowed to be blank before
+ * the browser has been granted microphone permission.
+ */
+export async function listAudioInputs(): Promise<AudioInputDevice[]> {
+  if (!navigator.mediaDevices?.enumerateDevices) return [];
+  const devices = await navigator.mediaDevices.enumerateDevices();
+  return devices
+    .filter((device) => device.kind === 'audioinput')
+    .map((device, index) => ({
+      id: device.deviceId,
+      label: device.label || `Audio input ${index + 1}`,
+    }));
+}
+
 export interface AudioChunk {
   readonly samples: Float32Array;
   readonly sampleRate: number;
@@ -33,9 +55,11 @@ export interface AnalysisFrame {
   bpm?: number;
   /** Confidence for this frame alone, 0..1. */
   bpmConfidence?: number;
+  bpmDiagnostics?: BpmDiagnostics;
   key?: MusicalKey;
   camelot?: CamelotKey;
   keyConfidence?: number;
+  keyDiagnostics?: KeyDiagnostics;
 }
 
 /** Aggregated result over multiple overlapping observations. */
@@ -54,11 +78,41 @@ export interface RollingResult {
   frames: readonly AnalysisFrame[];
 }
 
+/**
+ * Live view of what the microphone is actually delivering.
+ *
+ * Detection guards deliberately refuse to answer on a weak signal, so without
+ * this the UI cannot distinguish "no audio is arriving" from "audio is fine but
+ * the analysis will not commit". Those need different actions from the user.
+ */
+export interface InputLevel {
+  /** RMS of the most recent chunk, 0..1. */
+  rms: number;
+  /** Peak sample magnitude of the most recent chunk, 0..1. */
+  peak: number;
+  /** Highest peak seen this session, so a brief transient is not missed. */
+  peakHold: number;
+  /** True once any chunk has arrived from the capture graph. */
+  receiving: boolean;
+  /** How much audio is buffered, in seconds. */
+  secondsBuffered: number;
+  /** Total capture duration; unlike the bounded DSP window this can reach 90s+. */
+  secondsCaptured: number;
+  /** Seconds still needed before the first reading can be produced. */
+  secondsUntilFirstReading: number;
+  /** Downsampled envelope for drawing, newest last, values 0..1. */
+  waveform: Float32Array;
+  /** Why the key detector last committed or declined, when known. */
+  keyDiagnostics?: KeyDiagnostics;
+}
+
 export interface Analyser {
   readonly running: boolean;
   attach(source: AudioSource): Promise<void>;
   detach(): Promise<void>;
   result(): RollingResult;
+  /** Current input metering, independent of whether detection has committed. */
+  input(): InputLevel;
   reset(): void;
   onFrame(listener: (frame: AnalysisFrame, result: RollingResult) => void): () => void;
 }
@@ -84,6 +138,8 @@ class MicrophoneAudioSource implements AudioSource {
   private mute?: GainNode;
   private moduleUrl?: string;
   private listeners = new Set<(chunk: AudioChunk) => void>();
+
+  constructor(private readonly deviceId?: string) {}
 
   get active(): boolean {
     return Boolean(this.context && this.context.state !== 'closed');
@@ -111,6 +167,7 @@ class MicrophoneAudioSource implements AudioSource {
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         audio: {
+          ...(this.deviceId ? { deviceId: { exact: this.deviceId } } : {}),
           autoGainControl: false,
           echoCancellation: false,
           noiseSuppression: false,
@@ -195,12 +252,79 @@ class CrateNavCapture extends AudioWorkletProcessor {
 registerProcessor('cratenav-capture', CrateNavCapture);
 `;
 
+/**
+ * Why the key detector did or did not commit.
+ *
+ * Surfaced to the UI on purpose: the guards refuse to answer on weak evidence,
+ * and without the numbers behind that refusal there is no way to tell a mic
+ * problem from a threshold set too tight. Guessing at the values from synthetic
+ * signals is exactly how the thresholds came to be wrong.
+ */
+export interface KeyDiagnostics {
+  /** Normalised 12-bin chroma, 0..1 relative to its own maximum. */
+  chroma: number[];
+  /** Relative spread of the chroma; a flat one carries no tonal information. */
+  spread: number;
+  /** Best Krumhansl correlation found. */
+  best: number;
+  /** Gap to the best candidate on a different tonic. */
+  margin: number;
+  /** The leading candidate, whether or not it was accepted. */
+  candidate?: string;
+  /** Leading alternatives before thresholding, for an explainable capture UI. */
+  candidates?: { name: string; score: number }[];
+  /** Tonal-window gate used by the D&B profile. */
+  windows?: { accepted: number; rejected: number };
+  /** Strong spectral peaks retained after leakage rejection. */
+  peaks?: {
+    frequency: number;
+    note: string;
+    weight: number;
+    harmonicOf?: string;
+  }[];
+  peakCounts?: { accepted: number; rejected: number; harmonicsFolded: number };
+  /** Raw pitch-class energy before harmonic deconvolution. */
+  observedChroma?: number[];
+  /** Independent tonal-window votes inside the current analysis frame. */
+  sectionVotes?: { key: string; windows: number }[];
+  transientPeaksAttenuated?: number;
+  /** Which guard stopped it, if any. */
+  rejectedBy?: 'no-audio' | 'no-peaks' | 'spread' | 'correlation' | 'margin';
+  /** Thresholds in force, so the UI can state them rather than hardcode them. */
+  thresholds: { spread: number; correlation: number; margin: number };
+}
+
+export type AnalysisProfile = 'general' | 'drum-and-bass';
+
+export interface BpmDiagnostics {
+  profile: AnalysisProfile;
+  /** Independent tempo estimates from the full signal and D&B frequency bands. */
+  bands: { band: 'full' | 'low' | 'mid' | 'high'; bpm?: number; confidence?: number }[];
+  /** Canonical hypotheses after D&B half-time interpretation. */
+  candidates: { bpm: number; support: number; bands: string[] }[];
+  agreement: number;
+}
+
 export interface Detection {
   bpm?: number;
   bpmConfidence?: number;
+  bpmDiagnostics?: BpmDiagnostics;
   key?: MusicalKey;
   keyConfidence?: number;
+  keyDiagnostics?: KeyDiagnostics;
 }
+
+/**
+ * Key-detection guards. Loosened from the values first shipped, which were set
+ * against clean synthetic triads correlating above 0.78 and rejected real
+ * material outright. The spread and margin checks are what actually stop noise
+ * being reported, so those carry the weight rather than a high correlation bar.
+ */
+export const KEY_THRESHOLDS = {
+  spread: 0.14,
+  correlation: 0.32,
+  margin: 0.03,
+} as const;
 
 const PITCH_CLASSES: readonly PitchClass[] = [
   'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
@@ -238,10 +362,15 @@ function confidenceBand(confidence: number | undefined, stable: boolean): Confid
   return 'LOW';
 }
 
-/** Detect tempo from an onset-strength envelope. Exported for deterministic tests. */
-export function detectBpm(samples: Float32Array, sampleRate: number): Pick<Detection, 'bpm' | 'bpmConfidence'> {
+/** Core tempo estimate from one onset-strength signal. */
+function detectBpmCore(samples: Float32Array, sampleRate: number): Pick<Detection, 'bpm' | 'bpmConfidence'> {
   const frameSize = 1024;
-  const hop = 256;
+  // 128-sample hop gives a 375 Hz onset envelope. At 256 the frame quantisation
+  // alone cost the fundamental period most of its correlation whenever the beat
+  // did not land near a whole frame: at 186 BPM the true lag scored 0.71 while
+  // two beats, landing almost exactly on a frame, scored 0.96 — so the detector
+  // reported half tempo for arithmetic reasons rather than musical ones.
+  const hop = 128;
   if (samples.length < sampleRate * 4) return {};
 
   const envelope: number[] = [];
@@ -263,14 +392,32 @@ export function detectBpm(samples: Float32Array, sampleRate: number): Pick<Detec
     envelope[i] = Math.max(0, envelope[i]! - envelopeMean * 0.35);
   }
 
+  // Light smoothing widens each onset over a few frames. A one-frame spike
+  // train is pathologically sensitive to sub-frame misalignment, which is what
+  // let a beat multiple out-score the beat itself.
+  const smoothed = envelope.slice();
+  for (let i = 1; i < envelope.length - 1; i += 1) {
+    smoothed[i] = envelope[i - 1]! * 0.25 + envelope[i]! * 0.5 + envelope[i + 1]! * 0.25;
+  }
+  for (let i = 0; i < envelope.length; i += 1) envelope[i] = smoothed[i]!;
+
   const envelopeRate = sampleRate / hop;
   const minBpm = 60;
   const maxBpm = 210;
   const minLag = Math.floor((60 * envelopeRate) / maxBpm);
   const maxLag = Math.ceil((60 * envelopeRate) / minBpm);
+  /**
+   * The autocorrelation is computed far past the slowest candidate tempo.
+   *
+   * Comb support needs the multiples of a candidate period, and at 172 BPM the
+   * beat is about 131 frames while the 60 BPM limit is 375 — only two multiples
+   * fit. With so little support a dotted-note period scored higher than the
+   * beat, which is how 172 came back as 114.8.
+   */
+  const combCeiling = Math.min(maxLag * 4, Math.floor(envelope.length / 2));
   const scores: { lag: number; score: number }[] = [];
 
-  for (let lag = minLag; lag <= maxLag; lag += 1) {
+  for (let lag = minLag; lag <= combCeiling; lag += 1) {
     let dot = 0;
     let left = 0;
     let right = 0;
@@ -285,39 +432,283 @@ export function detectBpm(samples: Float32Array, sampleRate: number): Pick<Detec
     scores.push({ lag, score: correlation });
   }
 
-  const ranked = [...scores].sort((a, b) => b.score - a.score || a.lag - b.lag);
-  const strongest = ranked[0];
-  if (!strongest || strongest.score < 0.08) return {};
+  /**
+   * Autocorrelation sampled at a FRACTIONAL lag, linearly interpolated.
+   *
+   * Real beat periods are almost never a whole number of envelope frames
+   * (140 BPM is 80.36 frames here), so rounding before probing a multiple
+   * throws away the alignment the comb filter depends on and the true tempo
+   * loses to its own double.
+   */
+  const scoreAt = (lag: number): number => {
+    if (lag < minLag || lag > combCeiling) return 0;
+    const position = lag - minLag;
+    const low = Math.floor(position);
+    const high = Math.min(scores.length - 1, low + 1);
+    const fraction = position - low;
+    const a = scores[low]?.score ?? 0;
+    const b = scores[high]?.score ?? 0;
+    return a + (b - a) * fraction;
+  };
 
-  // Autocorrelation often makes the two-beat lag slightly stronger because it
-  // has less timing jitter. Prefer its half-lag only when that faster pulse is
-  // itself a strong peak; a genuinely slow record will not have one there.
-  let nearPeak = strongest;
-  const doubleTempo = scores.reduce<typeof strongest | undefined>((closest, candidate) =>
-    Math.abs(candidate.lag - strongest.lag / 2) < Math.abs((closest?.lag ?? Infinity) - strongest.lag / 2)
-      ? candidate
-      : closest, undefined);
-  if (doubleTempo && doubleTempo.score >= strongest.score * 0.78) nearPeak = doubleTempo;
+  /**
+   * Noise floor of the autocorrelation, as a robust median.
+   *
+   * Dense percussion raises correlation everywhere — 16th hats lift it to about
+   * 0.21 at every lag — so absolute values mean little. What matters is how far
+   * a peak rises ABOVE the floor.
+   */
+  const floorSamples: number[] = [];
+  for (let lag = minLag; lag <= combCeiling; lag += 1) floorSamples.push(scoreAt(lag));
+  const acfFloor = median(floorSamples);
 
-  // Parabolic interpolation gives sub-envelope-frame precision (important at
-  // fast tempos, where one integer lag can otherwise be several BPM).
-  const before = scores.find((candidate) => candidate.lag === nearPeak.lag - 1)?.score;
-  const after = scores.find((candidate) => candidate.lag === nearPeak.lag + 1)?.score;
-  let refinedLag = nearPeak.lag;
-  if (before !== undefined && after !== undefined) {
-    const denominator = before - 2 * nearPeak.score + after;
-    if (Math.abs(denominator) > 1e-9) {
-      refinedLag += Math.max(-0.5, Math.min(0.5, 0.5 * (before - after) / denominator));
+  /**
+   * Support for a candidate period: how far its whole harmonic series rises
+   * above the floor.
+   *
+   * The beat is the period every one of whose multiples is elevated. A dotted
+   * note always has a multiple landing between beats, at the floor. Measured on
+   * a busy 176 BPM break, the beat had all four multiples elevated while 1.5
+   * beats had two at the floor.
+   *
+   * Taking the plain minimum across multiples was tried and fails here: with a
+   * raised floor every candidate returns that floor and the statistic collapses
+   * (0.216 at the range boundary against 0.231 for the true beat). Averaging the
+   * elevations discriminates, while a penalty for any multiple sitting at the
+   * floor keeps a dotted note from winning on strength alone.
+   */
+  const AT_FLOOR = 0.03;
+
+  /**
+   * Find the beat as an integer subdivision of the dominant periodicity.
+   *
+   * Every statistic computed only inside the 60-210 BPM window proved
+   * defeatable, because the strongest periodicity in real music is the BAR and
+   * it usually sits outside that window. Measured: a busy 176 BPM break has the
+   * bar at 0.781 while the beat itself is 0.253 and a dotted note 0.477. Any
+   * scheme ranking candidates on their own strength therefore prefers the
+   * dotted note, and anything ranking on a floor-relative average prefers two
+   * beats because the bar inflates it.
+   *
+   * Two facts make the subdivision approach robust where those failed:
+   *   - a real beat divides the dominant period a whole number of times, so a
+   *     dotted note and the range boundary are excluded by construction;
+   *   - among the divisors, the beat is the one that actually correlates. For a
+   *     plain click track every multiple ties, so the tie breaks towards the
+   *     faster reading, which is the beat rather than a bar of it.
+   */
+  let dominantLag = 0;
+  let dominantScore = 0;
+  for (let lag = minLag; lag <= combCeiling; lag += 0.5) {
+    const value = scoreAt(lag);
+    if (value > dominantScore) {
+      dominantScore = value;
+      dominantLag = lag;
+    }
+  }
+  // Noise has a flat autocorrelation; its highest point is not a tempo.
+  if (!dominantLag || dominantScore - acfFloor < 0.12) return {};
+
+  interface Subdivision {
+    lag: number;
+    strength: number;
+  }
+  const subdivisions: Subdivision[] = [];
+  // Up to eight, so a bar of 4/4 reaches the eighth note and a 5- or 7-beat
+  // argmax on a metronomic signal still recovers the beat.
+  for (let divisor = 1; divisor <= 8; divisor += 1) {
+    const raw = dominantLag / divisor;
+    if (raw < minLag - 2 || raw > maxLag + 2) continue;
+    // Snap to the real peak: a divisor rarely lands exactly on it, and for
+    // sharp onsets being a frame out costs most of the correlation.
+    let lag = raw;
+    let strength = scoreAt(raw);
+    const window = Math.max(1.5, raw * 0.02);
+    for (let probe = raw - window; probe <= raw + window; probe += 0.1) {
+      const value = scoreAt(probe);
+      if (value > strength) {
+        strength = value;
+        lag = probe;
+      }
+    }
+    if (lag < minLag || lag > maxLag) continue;
+    if (strength - acfFloor <= AT_FLOOR) continue;
+    subdivisions.push({ lag, strength });
+  }
+
+  if (!subdivisions.length) return {};
+
+  const strongest = Math.max(...subdivisions.map((entry) => entry.strength));
+  /**
+   * Among comparably strong subdivisions, prefer the faster reading.
+   *
+   * The tolerance is wide because a kick/snare alternation genuinely repeats
+   * every two beats, so the two-beat period is a real periodicity and not an
+   * artefact — at 190-200 BPM a strict window picked it and halved the tempo.
+   * A subdivision faster than the beat cannot be chosen in its place: it would
+   * fall outside the 60-210 BPM range.
+   */
+  const contenders = subdivisions.filter((entry) => entry.strength >= strongest * 0.9);
+  contenders.sort((a, b) => a.lag - b.lag);
+  const chosenLag = contenders[0]!.lag;
+
+  let inRangeBest = 0;
+  for (let lag = minLag; lag <= maxLag; lag += 0.25) {
+    inRangeBest = Math.max(inRangeBest, scoreAt(lag));
+  }
+  if (inRangeBest - acfFloor < 0.1) return {};
+
+  // Refine on the raw autocorrelation. This matters for accuracy as well as
+  // precision: candidates are accepted through a proportional tolerance, so
+  // without snapping to the true peak every reading came out around 0.7% fast.
+  const refineWindow = Math.max(1.5, chosenLag * 0.02);
+  let refinedLag = chosenLag;
+  let bestLocal = scoreAt(chosenLag);
+  for (let probe = chosenLag - refineWindow; probe <= chosenLag + refineWindow; probe += 0.05) {
+    const value = scoreAt(probe);
+    if (value > bestLocal) {
+      bestLocal = value;
+      refinedLag = probe;
     }
   }
   const bpm = (60 * envelopeRate) / refinedLag;
-  const unrelatedRunnerUp = ranked.find((candidate) => {
-    const ratio = Math.max(candidate.lag, nearPeak.lag) / Math.min(candidate.lag, nearPeak.lag);
-    return Math.abs(candidate.lag - nearPeak.lag) > 2 && Math.abs(ratio - 2) > 0.08;
-  });
-  const margin = nearPeak.score - (unrelatedRunnerUp?.score ?? 0);
-  const confidence = clamp01(nearPeak.score * 0.72 + Math.max(0, margin) * 0.9 + 0.1);
+
+  // Confidence must reflect how much better this period is than an unrelated
+  // one. Anything within a main lobe, or at a tempo multiple, is not a rival.
+  // Confidence compares the chosen period against the best UNRELATED one.
+  // A lag inside the same main lobe, or at a whole-number tempo multiple, is
+  // corroboration rather than competition.
+  const chosenScore = scoreAt(chosenLag);
+  let rivalScore = 0;
+  for (let lag = minLag; lag <= maxLag; lag += 0.25) {
+    if (Math.abs(lag - chosenLag) <= 4) continue;
+    const ratio = Math.max(lag, chosenLag) / Math.min(lag, chosenLag);
+    let related = false;
+    for (const harmonic of [1.5, 2, 3, 4]) {
+      if (Math.abs(ratio - harmonic) < 0.06) related = true;
+    }
+    if (related) continue;
+    rivalScore = Math.max(rivalScore, scoreAt(lag));
+  }
+  const margin = chosenScore - rivalScore;
+
+  /**
+   * Confidence is calibrated against the statistic the decision actually used,
+   * and against what real music looks like.
+   *
+   * Absolute autocorrelation near 1.0 only happens for a metronome. A correct
+   * reading on a syncopated break sits around 0.3, and scaling confidence
+   * straight off that reported a right answer at 0.10 — which reads in the UI
+   * as "do not trust this". `SOLID_SUPPORT` is the level at which a period's
+   * whole harmonic series counts as convincingly present.
+   */
+  const SOLID_SUPPORT = 0.3;
+  const seriesStrength = Math.min(1, Math.max(0, scoreAt(chosenLag) - acfFloor) / SOLID_SUPPORT);
+  const uniqueness = Math.min(1, Math.max(0, margin) / 0.15);
+  const confidence = clamp01(0.3 + seriesStrength * 0.45 + uniqueness * 0.25);
   return { bpm: Math.round(bpm * 10) / 10, bpmConfidence: confidence };
+}
+
+/** Split a line input into the rhythm regions that matter for D&B. */
+function rhythmBands(samples: Float32Array, sampleRate: number): {
+  low: Float32Array;
+  mid: Float32Array;
+  high: Float32Array;
+} {
+  const low = new Float32Array(samples.length);
+  const mid = new Float32Array(samples.length);
+  const high = new Float32Array(samples.length);
+  const coefficient = (hz: number) => 1 - Math.exp((-2 * Math.PI * hz) / sampleRate);
+  const a30 = coefficient(30);
+  const a180 = coefficient(180);
+  const a2500 = coefficient(2500);
+  let lp30 = 0;
+  let lp180 = 0;
+  let lp2500 = 0;
+  for (let index = 0; index < samples.length; index += 1) {
+    const value = samples[index]!;
+    lp30 += a30 * (value - lp30);
+    lp180 += a180 * (value - lp180);
+    lp2500 += a2500 * (value - lp2500);
+    low[index] = lp180 - lp30;
+    mid[index] = lp2500 - lp180;
+    high[index] = value - lp2500;
+  }
+  return { low, mid, high };
+}
+
+function dnbCanonicalBpm(value: number): number {
+  const doubled = value >= 72 && value <= 105 ? value * 2 : value;
+  return Math.round(doubled * 10) / 10;
+}
+
+/**
+ * Detect tempo with an explicit D&B mode.
+ *
+ * General analysis retains the proven full-band detector. D&B additionally
+ * asks kick/sub, snare/break and hats to vote independently, canonicalises an
+ * exact half-time interpretation, and reports the correlations behind the
+ * decision instead of hiding them in one percentage.
+ */
+export function detectBpm(
+  samples: Float32Array,
+  sampleRate: number,
+  profile: AnalysisProfile = 'general',
+): Pick<Detection, 'bpm' | 'bpmConfidence' | 'bpmDiagnostics'> {
+  const full = detectBpmCore(samples, sampleRate);
+  if (profile === 'general') {
+    return {
+      ...full,
+      bpmDiagnostics: {
+        profile,
+        bands: [{ band: 'full', bpm: full.bpm, confidence: full.bpmConfidence }],
+        candidates: full.bpm === undefined ? [] : [{ bpm: full.bpm, support: full.bpmConfidence ?? 0, bands: ['full'] }],
+        agreement: full.bpm === undefined ? 0 : 1,
+      },
+    };
+  }
+
+  const split = rhythmBands(samples, sampleRate);
+  const readings = [
+    { band: 'full' as const, ...full },
+    { band: 'low' as const, ...detectBpmCore(split.low, sampleRate) },
+    { band: 'mid' as const, ...detectBpmCore(split.mid, sampleRate) },
+    { band: 'high' as const, ...detectBpmCore(split.high, sampleRate) },
+  ];
+  const groups: { bpm: number; support: number; bands: string[]; values: number[] }[] = [];
+  for (const reading of readings) {
+    if (reading.bpm === undefined) continue;
+    const bpm = dnbCanonicalBpm(reading.bpm);
+    const group = groups.find((candidate) => Math.abs(candidate.bpm - bpm) / candidate.bpm <= 0.018);
+    const weight = reading.bpmConfidence ?? 0.4;
+    if (group) {
+      group.values.push(bpm);
+      group.support += weight;
+      group.bands.push(reading.band);
+      group.bpm = median(group.values);
+    } else {
+      groups.push({ bpm, support: weight, bands: [reading.band], values: [bpm] });
+    }
+  }
+  groups.sort((a, b) => b.support - a.support || b.bands.length - a.bands.length);
+  const winner = groups[0];
+  const totalSupport = groups.reduce((sum, group) => sum + group.support, 0);
+  const agreement = winner && totalSupport ? winner.support / totalSupport : 0;
+  const meanWinnerConfidence = winner
+    ? mean(readings.filter((reading) => winner.bands.includes(reading.band)).map((reading) => reading.bpmConfidence ?? 0))
+    : 0;
+  // Agreement is a measured vote share, not an invented accuracy percentage.
+  const confidence = winner ? clamp01(meanWinnerConfidence * 0.65 + agreement * 0.35) : undefined;
+  return {
+    bpm: winner ? Math.round(winner.bpm * 10) / 10 : undefined,
+    bpmConfidence: confidence,
+    bpmDiagnostics: {
+      profile,
+      bands: readings.map(({ band, bpm, bpmConfidence }) => ({ band, bpm, confidence: bpmConfidence })),
+      candidates: groups.slice(0, 5).map(({ bpm, support, bands }) => ({ bpm, support, bands })),
+      agreement,
+    },
+  };
 }
 
 /** In-place radix-2 FFT. */
@@ -377,17 +768,90 @@ function rotatedProfile(profile: readonly number[], tonic: number): number[] {
   return PITCH_CLASSES.map((_, pitchClass) => profile[(pitchClass - tonic + 12) % 12]!);
 }
 
-/** Detect musical key with FFT chroma and major/minor key-profile correlation. */
-export function detectKey(samples: Float32Array, sampleRate: number): Pick<Detection, 'key' | 'keyConfidence'> {
-  const fftSize = 4096;
-  // Sampling every other FFT window keeps rolling analysis responsive on
-  // phones while still producing dozens of chroma observations per pass.
-  const hop = 8192;
+/**
+ * Estimate non-negative fundamental pitch classes from their overtone mixture.
+ * This small multiplicative NNLS solve reduces the false fifth/major-third
+ * signature of one bass note. A little observed chroma is retained so genuine
+ * chord tones are not erased when their own harmonic series is weak.
+ */
+function deconvolveHarmonics(observed: readonly number[]): number[] {
+  const basis = Array.from({ length: 12 }, () => Array<number>(12).fill(0));
+  for (let fundamental = 0; fundamental < 12; fundamental += 1) {
+    for (let harmonic = 1; harmonic <= 10; harmonic += 1) {
+      const offset = Math.round(12 * Math.log2(harmonic)) % 12;
+      const pitchClass = (fundamental + offset) % 12;
+      basis[pitchClass]![fundamental] = basis[pitchClass]![fundamental]! + 1 / harmonic;
+    }
+  }
+  let estimate = observed.map((value) => Math.max(1e-6, value));
+  for (let iteration = 0; iteration < 40; iteration += 1) {
+    const reconstructed = basis.map((row) =>
+      row.reduce((sum, value, index) => sum + value * estimate[index]!, 0),
+    );
+    estimate = estimate.map((value, fundamental) => {
+      let numerator = 0;
+      let denominator = 0.015;
+      for (let pitchClass = 0; pitchClass < 12; pitchClass += 1) {
+        numerator += basis[pitchClass]![fundamental]! * observed[pitchClass]!;
+        denominator += basis[pitchClass]![fundamental]! * reconstructed[pitchClass]!;
+      }
+      return Math.max(0, value * numerator / Math.max(1e-9, denominator));
+    });
+  }
+  return estimate.map((value, index) => value * 0.7 + observed[index]! * 0.3);
+}
+
+/**
+ * Detect musical key from an FFT chroma and Krumhansl profile correlation.
+ *
+ * Two things here are load-bearing and were previously wrong:
+ *
+ * 1. FFT bins are LINEARLY spaced, so the number of bins landing on each
+ *    pitch class grows with frequency (about 22 for D, 39 for B at 4096/48k).
+ *    Summing bin magnitudes therefore encodes bin density, not music: a flat
+ *    spectrum used to correlate at 0.42 with Bb minor, so the detector
+ *    reported 3A for white noise and for most real input. Each pitch class is
+ *    now a MEAN over its bins, which removes the density term entirely.
+ *
+ * 2. Broadband noise (cymbals, vinyl surface noise, room) lands in every bin.
+ *    Subtracting a per-window median whitens the spectrum so only tonal peaks
+ *    survive, which is what a chroma is supposed to measure.
+ */
+export function detectKey(
+  samples: Float32Array,
+  sampleRate: number,
+  profile: AnalysisProfile = 'general',
+): Pick<Detection, 'key' | 'keyConfidence' | 'keyDiagnostics'> {
+  // D&B needs enough resolution to see the 40–100 Hz sub/root region. The
+  // general detector stays cheaper; the D&B path uses a longer FFT and wider
+  // overlap, then rejects non-tonal windows with the same guards below.
+  const fftSize = profile === 'drum-and-bass' ? 32768 : 8192;
+  const hop = profile === 'drum-and-bass' ? 16384 : 8192;
   if (samples.length < fftSize * 2) return {};
-  const chroma = Array<number>(12).fill(0);
+
+  const chromaSum = Array<number>(12).fill(0);
+  const chromaBins = Array<number>(12).fill(0);
   let windows = 0;
+  let rejectedWindows = 0;
+  let acceptedPeaks = 0;
+  let rejectedPeaks = 0;
+  let harmonicsFolded = 0;
+  let transientPeaksAttenuated = 0;
+  const peakEvidence: NonNullable<KeyDiagnostics['peaks']> = [];
+  const sectionVoteCounts = new Map<string, number>();
+  let previousWhitened: Float64Array | undefined;
+
+  // Pitch matters most between A2 and C7; below that a semitone is narrower
+  // than an FFT bin, above it harmonics dominate over the tonal centre.
+  const lowestHz = profile === 'drum-and-bass' ? 45 : 110;
+  const highestHz = 2100;
+  const firstBin = Math.max(1, Math.ceil((lowestHz * fftSize) / sampleRate));
+  const lastBin = Math.min(fftSize / 2 - 1, Math.floor((highestHz * fftSize) / sampleRate));
+  if (lastBin <= firstBin) return {};
 
   for (let offset = 0; offset + fftSize <= samples.length; offset += hop) {
+    const windowChromaSum = Array<number>(12).fill(0);
+    const windowChromaBins = Array<number>(12).fill(0);
     const real = new Float64Array(fftSize);
     const imag = new Float64Array(fftSize);
     let energy = 0;
@@ -398,23 +862,245 @@ export function detectKey(samples: Float32Array, sampleRate: number): Pick<Detec
     }
     if (energy / fftSize < 1e-7) continue;
     fft(real, imag);
-    windows += 1;
 
-    const firstBin = Math.max(1, Math.ceil((55 * fftSize) / sampleRate));
-    const lastBin = Math.min(fftSize / 2, Math.floor((4200 * fftSize) / sampleRate));
+    const magnitudes = new Float64Array(lastBin - firstBin + 1);
     for (let bin = firstBin; bin <= lastBin; bin += 1) {
+      magnitudes[bin - firstBin] = Math.hypot(real[bin]!, imag[bin]!);
+    }
+
+    // A sparse tonal spectrum has a low geometric/arithmetic mean ratio;
+    // broadband noise is close to flat. Peak-picking alone can turn random
+    // noise bumps into convincing-looking notes, so reject flat windows before
+    // asking which bins are peaks.
+    const magnitudeValues = [...magnitudes];
+    const magnitudeMean = mean(magnitudeValues);
+    const logMean = magnitudeMean
+      ? mean(magnitudeValues.map((value) => Math.log(Math.max(1e-12, value))))
+      : 0;
+    const spectralFlatness = magnitudeMean ? Math.exp(logMean) / magnitudeMean : 1;
+    if (spectralFlatness > 0.62) {
+      rejectedWindows += 1;
+      continue;
+    }
+
+    /**
+     * Estimate how far this window is detuned from A440, in semitones.
+     *
+     * Equal temperament is an assumption, not a measurement. A record played
+     * off zero pitch — or simply cut slightly sharp — puts every note between
+     * two semitones, and the chroma smears across both. Measured on an A minor
+     * chord: at 50 cents it reported C# minor and at 68 cents (a +4% fader,
+     * exactly the case v1.1 exists for) it reported A# minor. Confidently
+     * wrong, which is worse than silent.
+     *
+     * The offset is the magnitude-weighted circular mean of each peak's
+     * distance to its nearest semitone, over a one-semitone period.
+     */
+    const tuningFloorIndex = Math.floor(magnitudes.length / 2);
+    const tuningFloor = Float64Array.from(magnitudes).sort()[tuningFloorIndex] ?? 0;
+    let offsetX = 0;
+    let offsetY = 0;
+    for (let bin = firstBin; bin <= lastBin; bin += 1) {
+      const magnitude = magnitudes[bin - firstBin]! - tuningFloor;
+      if (magnitude <= 0) continue;
       const frequency = (bin * sampleRate) / fftSize;
       const midi = 69 + 12 * Math.log2(frequency / 440);
-      const pitchClass = ((Math.round(midi) % 12) + 12) % 12;
-      const magnitude = Math.hypot(real[bin]!, imag[bin]!);
-      // Square-root compression stops one loud fundamental overwhelming the
-      // chord while a gentle high-frequency roll-off reduces cymbal influence.
-      chroma[pitchClass] = chroma[pitchClass]!
-        + Math.sqrt(magnitude) / Math.sqrt(Math.max(1, frequency / 220));
+      const deviation = midi - Math.round(midi); // -0.5 .. 0.5 semitones
+      const angle = 2 * Math.PI * deviation;
+      offsetX += Math.cos(angle) * magnitude;
+      offsetY += Math.sin(angle) * magnitude;
     }
+    const tuningOffset =
+      offsetX || offsetY ? Math.atan2(offsetY, offsetX) / (2 * Math.PI) : 0;
+
+    // Whitening floor: the median is a robust stand-in for the noise floor,
+    // so only genuine spectral peaks contribute to the chroma.
+    const sorted = Float64Array.from(magnitudes).sort();
+    const floor = sorted[Math.floor(sorted.length / 2)] ?? 0;
+    const whitened = Float64Array.from(magnitudes, (value) => Math.max(0, value - floor));
+    let strongestAboveFloor = 0;
+    for (const rawMagnitude of magnitudes) {
+      strongestAboveFloor = Math.max(strongestAboveFloor, rawMagnitude - floor);
+    }
+    let peaked = false;
+
+    for (let bin = firstBin; bin <= lastBin; bin += 1) {
+      const magnitude = whitened[bin - firstBin]!;
+      const frequency = (bin * sampleRate) / fftSize;
+      // Correct to the tuning this window is actually in, so a pitched record
+      // lands on the grid instead of between it.
+      const midi = 69 + 12 * Math.log2(frequency / 440) - tuningOffset;
+
+      // Split each bin between its two nearest semitones by fractional
+      // distance rather than rounding to one. A bin often sits near a semitone
+      // boundary — C4 straddles bins 44 and 45 at this resolution, and bin 45
+      // rounds up to C# — so rounding smears a clean note into its neighbour
+      // and a triad can end up correlating with the wrong key.
+      const lowerNote = Math.floor(midi);
+      const upperFraction = midi - lowerNote;
+      const lowerClass = ((lowerNote % 12) + 12) % 12;
+      const upperClass = (((lowerNote + 1) % 12) + 12) % 12;
+
+      windowChromaBins[lowerClass] = windowChromaBins[lowerClass]! + (1 - upperFraction);
+      windowChromaBins[upperClass] = windowChromaBins[upperClass]! + upperFraction;
+      if (magnitude <= 0) continue;
+
+      // Hann-window leakage paints one real sinusoid across several adjacent
+      // FFT bins. Counting every positive bin made those skirts look like
+      // extra notes. Keep only a true local maximum that clears a small
+      // window-relative prominence floor.
+      const magnitudeIndex = bin - firstBin;
+      const neighbourhood = 2;
+      let localMaximum = true;
+      for (let offset = -neighbourhood; offset <= neighbourhood; offset += 1) {
+        if (!offset) continue;
+        const neighbour = magnitudes[magnitudeIndex + offset];
+        if (neighbour !== undefined && neighbour - floor > magnitude) {
+          localMaximum = false;
+          break;
+        }
+      }
+      if (!localMaximum || magnitude < strongestAboveFloor * 0.025) {
+        rejectedPeaks += 1;
+        continue;
+      }
+      peaked = true;
+      acceptedPeaks += 1;
+
+      // Square-root compression stops one loud fundamental from swamping the
+      // rest of the chord; the gentle low-frequency emphasis reflects that the
+      // bass usually carries the root.
+      const rootWeight = 1 / Math.sqrt(Math.max(1, frequency / lowestHz));
+      let persistenceWeight = 1;
+      if (profile === 'drum-and-bass') {
+        let previousStrength = 0;
+        if (previousWhitened) {
+          for (let neighbour = -2; neighbour <= 2; neighbour += 1) {
+            previousStrength = Math.max(previousStrength, previousWhitened[magnitudeIndex + neighbour] ?? 0);
+          }
+        }
+        const persistence = previousWhitened ? clamp01((previousStrength / magnitude) * 1.5) : 0;
+        persistenceWeight = 0.25 + persistence * 0.75;
+        if (persistenceWeight < 0.8) transientPeaksAttenuated += 1;
+      }
+      const contribution = Math.sqrt(magnitude) * rootWeight * persistenceWeight;
+
+      // If a strong lower peak explains this one as an integer harmonic,
+      // retain some direct evidence but fold most of it back to the likely
+      // fundamental. This attacks the classic single-bass-note → false major
+      // chord failure without deleting genuine chord tones outright.
+      let harmonicParent: { harmonic: number; frequency: number; midi: number } | undefined;
+      for (let harmonic = 2; harmonic <= 6; harmonic += 1) {
+        const parentFrequency = frequency / harmonic;
+        if (parentFrequency < lowestHz) continue;
+        const parentBin = Math.round((parentFrequency * fftSize) / sampleRate);
+        const parentMagnitude = whitened[parentBin - firstBin] ?? 0;
+        if (parentMagnitude >= magnitude * 0.18) {
+          harmonicParent = {
+            harmonic,
+            frequency: parentFrequency,
+            midi: 69 + 12 * Math.log2(parentFrequency / 440) - tuningOffset,
+          };
+          break;
+        }
+      }
+
+      const directShare = harmonicParent ? 0.35 : 1;
+      windowChromaSum[lowerClass] = windowChromaSum[lowerClass]! + contribution * directShare * (1 - upperFraction);
+      windowChromaSum[upperClass] = windowChromaSum[upperClass]! + contribution * directShare * upperFraction;
+      let harmonicOf: string | undefined;
+      if (harmonicParent) {
+        harmonicsFolded += 1;
+        const parentNote = Math.round(harmonicParent.midi);
+        const parentClass = ((parentNote % 12) + 12) % 12;
+        harmonicOf = `${PITCH_CLASSES[parentClass]!} ×${harmonicParent.harmonic}`;
+        windowChromaSum[parentClass] = windowChromaSum[parentClass]! + contribution * (1 - directShare);
+      }
+      const nearestNote = ((Math.round(midi) % 12) + 12) % 12;
+      peakEvidence.push({
+        frequency,
+        note: PITCH_CLASSES[nearestNote]!,
+        weight: contribution,
+        ...(harmonicOf ? { harmonicOf } : {}),
+      });
+    }
+    previousWhitened = whitened;
+    if (!peaked) continue;
+
+    // Breaks and cymbals can have peaks without carrying a tonal centre. In
+    // D&B mode, only windows whose chroma has meaningful shape contribute to
+    // the track key; rejected windows remain visible in diagnostics.
+    const localChroma = windowChromaSum.map((total, pitchClass) =>
+      windowChromaBins[pitchClass] ? total / windowChromaBins[pitchClass]! : 0,
+    );
+    const localMean = mean(localChroma);
+    const localSpread = localMean
+      ? Math.sqrt(mean(localChroma.map((value) => (value - localMean) ** 2))) / localMean
+      : 0;
+    if (profile === 'drum-and-bass' && localSpread < 0.1) {
+      rejectedWindows += 1;
+      continue;
+    }
+    const localModel = profile === 'drum-and-bass' ? deconvolveHarmonics(localChroma) : localChroma;
+    const localCandidates: { name: string; score: number }[] = [];
+    for (let tonic = 0; tonic < 12; tonic += 1) {
+      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} major`, score: correlation(localModel, rotatedProfile(MAJOR_PROFILE, tonic)) });
+      localCandidates.push({ name: `${PITCH_CLASSES[tonic]!} minor`, score: correlation(localModel, rotatedProfile(MINOR_PROFILE, tonic)) });
+    }
+    localCandidates.sort((a, b) => b.score - a.score);
+    const localWinner = localCandidates[0];
+    const localRival = localWinner
+      ? localCandidates.find((candidate) => candidate.name.split(' ')[0] !== localWinner.name.split(' ')[0])
+      : undefined;
+    if (localWinner && localWinner.score >= 0.22 && localWinner.score - (localRival?.score ?? 0) >= 0.015) {
+      sectionVoteCounts.set(localWinner.name, (sectionVoteCounts.get(localWinner.name) ?? 0) + 1);
+    }
+    for (let pitchClass = 0; pitchClass < 12; pitchClass += 1) {
+      chromaSum[pitchClass] = chromaSum[pitchClass]! + windowChromaSum[pitchClass]!;
+      chromaBins[pitchClass] = chromaBins[pitchClass]! + windowChromaBins[pitchClass]!;
+    }
+    windows += 1;
   }
 
-  if (!windows || chroma.every((value) => value === 0)) return {};
+  const emptyChroma = Array<number>(12).fill(0);
+  const thresholds = { ...KEY_THRESHOLDS };
+  const bail = (
+    rejectedBy: NonNullable<KeyDiagnostics['rejectedBy']>,
+    extra: Partial<KeyDiagnostics> = {},
+  ): Pick<Detection, 'key' | 'keyConfidence' | 'keyDiagnostics'> => ({
+    keyDiagnostics: {
+      chroma: emptyChroma,
+      spread: 0,
+      best: 0,
+      margin: 0,
+      thresholds,
+      windows: { accepted: windows, rejected: rejectedWindows },
+      peakCounts: { accepted: acceptedPeaks, rejected: rejectedPeaks, harmonicsFolded },
+      rejectedBy,
+      ...extra,
+    },
+  });
+
+  if (!windows) return bail('no-peaks');
+
+  // MEAN per pitch class, not sum: this is the density correction.
+  const observedChroma = chromaSum.map((total, pitchClass) =>
+    chromaBins[pitchClass] ? total / chromaBins[pitchClass]! : 0,
+  );
+  const chroma = profile === 'drum-and-bass' ? deconvolveHarmonics(observedChroma) : observedChroma;
+  const chromaTotal = chroma.reduce((sum, value) => sum + value, 0);
+  if (chromaTotal <= 0) return bail('no-audio');
+
+  const peak = Math.max(...chroma);
+  const normalised = chroma.map((value) => (peak > 0 ? value / peak : 0));
+
+  // A near-flat chroma carries no tonal information. Refusing here is what
+  // stops noise being reported as a key at high confidence.
+  const chromaMean = chromaTotal / 12;
+  const spread = Math.sqrt(
+    chroma.reduce((sum, value) => sum + (value - chromaMean) ** 2, 0) / 12,
+  ) / chromaMean;
+
   const candidates: { tonic: number; tonality: Tonality; score: number }[] = [];
   for (let tonic = 0; tonic < 12; tonic += 1) {
     candidates.push({ tonic, tonality: 'major', score: correlation(chroma, rotatedProfile(MAJOR_PROFILE, tonic)) });
@@ -422,18 +1108,63 @@ export function detectKey(samples: Float32Array, sampleRate: number): Pick<Detec
   }
   candidates.sort((a, b) => b.score - a.score);
   const best = candidates[0];
-  const second = candidates[1];
-  if (!best || best.score < 0.12) return {};
-  const margin = best.score - (second?.score ?? 0);
-  const confidence = clamp01(0.18 + Math.max(0, best.score) * 0.58 + Math.max(0, margin) * 1.5);
+
+  // The runner-up must be a DIFFERENT tonic. Major/minor on the same root
+  // always score similarly, so comparing against it would understate every
+  // margin and make confidence meaningless.
+  const rival = best ? candidates.find((candidate) => candidate.tonic !== best.tonic) : undefined;
+  const margin = best ? best.score - (rival?.score ?? 0) : 0;
+  const candidateName = best
+    ? `${PITCH_CLASSES[best.tonic]!} ${best.tonality}`
+    : undefined;
+
+  const diagnostics: KeyDiagnostics = {
+    chroma: normalised,
+    spread,
+    best: best?.score ?? 0,
+    margin,
+    thresholds,
+    windows: { accepted: windows, rejected: rejectedWindows },
+    peaks: peakEvidence.sort((a, b) => b.weight - a.weight).slice(0, 30),
+    peakCounts: { accepted: acceptedPeaks, rejected: rejectedPeaks, harmonicsFolded },
+    observedChroma: (() => {
+      const observedPeak = Math.max(...observedChroma);
+      return observedChroma.map((value) => observedPeak ? value / observedPeak : 0);
+    })(),
+    sectionVotes: [...sectionVoteCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([key, windows]) => ({ key, windows })),
+    transientPeaksAttenuated,
+    ...(candidateName ? { candidate: candidateName } : {}),
+    candidates: candidates.slice(0, 5).map((candidate) => ({
+      name: `${PITCH_CLASSES[candidate.tonic]!} ${candidate.tonality}`,
+      score: candidate.score,
+    })),
+  };
+
+  if (spread < thresholds.spread) return { keyDiagnostics: { ...diagnostics, rejectedBy: 'spread' } };
+  if (!best || best.score < thresholds.correlation) {
+    return { keyDiagnostics: { ...diagnostics, rejectedBy: 'correlation' } };
+  }
+  if (margin < thresholds.margin) {
+    return { keyDiagnostics: { ...diagnostics, rejectedBy: 'margin' } };
+  }
+
+  const confidence = clamp01(0.2 + best.score * 0.55 + Math.min(0.25, margin * 1.5));
   return {
     key: { pitchClass: PITCH_CLASSES[best.tonic]!, tonality: best.tonality },
     keyConfidence: confidence,
+    keyDiagnostics: diagnostics,
   };
 }
 
-export function analysePcm(samples: Float32Array, sampleRate: number): Detection {
-  return { ...detectBpm(samples, sampleRate), ...detectKey(samples, sampleRate) };
+export function analysePcm(
+  samples: Float32Array,
+  sampleRate: number,
+  profile: AnalysisProfile = 'general',
+): Detection {
+  return { ...detectBpm(samples, sampleRate, profile), ...detectKey(samples, sampleRate, profile) };
 }
 
 function sameKey(left: MusicalKey, right: MusicalKey): boolean {
@@ -441,7 +1172,7 @@ function sameKey(left: MusicalKey, right: MusicalKey): boolean {
 }
 
 /** Pure rolling aggregation, exported so stability policy is testable. */
-export function aggregateFrames(allFrames: readonly AnalysisFrame[], limit = 8): RollingResult {
+export function aggregateFrames(allFrames: readonly AnalysisFrame[], limit = 30): RollingResult {
   const frames = allFrames.slice(-limit);
   const bpmFrames = frames.filter((frame) => frame.bpm !== undefined);
   const bpms = bpmFrames.map((frame) => frame.bpm!);
@@ -465,21 +1196,39 @@ export function aggregateFrames(allFrames: readonly AnalysisFrame[], limit = 8):
   const octaveAmbiguity = comparedPairs >= 2 && octavePairs / comparedPairs >= 0.4;
   const bpmStable = bpmFrames.length >= 4 && bpmSpread <= 0.012 && !octaveAmbiguity;
 
+  // Key needs a longer musical context than BPM. Weight recent observations
+  // more strongly so an intro note cannot keep steering the result after the
+  // fuller bassline/harmony arrives, while still requiring a decisive lead.
   const keyFrames = frames.filter((frame) => frame.key !== undefined);
-  const keyGroups: { key: MusicalKey; frames: AnalysisFrame[] }[] = [];
+  const keyGroups: { key: MusicalKey; frames: AnalysisFrame[]; weight: number }[] = [];
+  let totalKeyWeight = 0;
   for (const frame of keyFrames) {
+    const frameIndex = frames.indexOf(frame);
+    const weight = 0.35 + 0.65 * ((frameIndex + 1) / Math.max(1, frames.length));
+    totalKeyWeight += weight;
     const group = keyGroups.find((entry) => sameKey(entry.key, frame.key!));
-    if (group) group.frames.push(frame);
-    else keyGroups.push({ key: frame.key!, frames: [frame] });
+    if (group) {
+      group.frames.push(frame);
+      group.weight += weight;
+    } else keyGroups.push({ key: frame.key!, frames: [frame], weight });
   }
-  keyGroups.sort((a, b) => b.frames.length - a.frames.length);
+  keyGroups.sort((a, b) => b.weight - a.weight);
   const winningKey = keyGroups[0];
+  const runnerUpKey = keyGroups[1];
   const key = winningKey?.key;
-  const keyAgreement = keyFrames.length ? (winningKey?.frames.length ?? 0) / keyFrames.length : 0;
+  const keyAgreement = totalKeyWeight ? (winningKey?.weight ?? 0) / totalKeyWeight : 0;
+  const keyLead = totalKeyWeight
+    ? ((winningKey?.weight ?? 0) - (runnerUpKey?.weight ?? 0)) / totalKeyWeight
+    : 0;
   const keyConfidence = winningKey
     ? clamp01(mean(winningKey.frames.map((frame) => frame.keyConfidence ?? 0)) * 0.7 + keyAgreement * 0.3)
     : undefined;
-  const keyStable = keyFrames.length >= 4 && keyAgreement >= 0.75;
+  const profile = frames[frames.length - 1]?.bpmDiagnostics?.profile ?? 'general';
+  // D&B melodies and bass riffs often imply several keys during their first
+  // few notes. Eight two-second observations gives roughly twenty seconds of
+  // context before the main UI calls a key locked.
+  const minimumKeyFrames = profile === 'drum-and-bass' ? 8 : 4;
+  const keyStable = keyFrames.length >= minimumKeyFrames && keyAgreement >= 0.72 && keyLead >= 0.18;
   const hasBpm = bpm !== undefined;
   const hasKey = key !== undefined;
   const stable = (hasBpm || hasKey) && (!hasBpm || bpmStable) && (!hasKey || keyStable);
@@ -497,6 +1246,11 @@ export function aggregateFrames(allFrames: readonly AnalysisFrame[], limit = 8):
     frames,
   };
 }
+
+/** Audio required before the first reading can be produced. */
+const MINIMUM_SECONDS = 6;
+/** Waveform history slots, one per captured chunk. */
+const WAVEFORM_POINTS = 96;
 
 class SampleRing {
   private data: Float32Array;
@@ -544,6 +1298,22 @@ class RollingAudioAnalyser implements Analyser {
   private samplesSinceFrame = 0;
   private current: RollingResult = aggregateFrames([]);
 
+  // Input metering. Kept separate from detection so the UI can always say
+  // whether audio is arriving, even when the detectors decline to commit.
+  private receiving = false;
+  private rms = 0;
+  private peak = 0;
+  private peakHold = 0;
+  private readonly waveform = new Float32Array(WAVEFORM_POINTS);
+  private waveformAt = 0;
+  private lastDiagnostics?: KeyDiagnostics;
+  private totalSamples = 0;
+  private worker?: Worker;
+  private analysisPending = false;
+  private generation = 0;
+
+  constructor(private readonly profile: AnalysisProfile = 'general') {}
+
   get running(): boolean {
     return Boolean(this.source?.active);
   }
@@ -568,17 +1338,69 @@ class RollingAudioAnalyser implements Analyser {
     const source = this.source;
     this.source = undefined;
     if (source) await source.stop();
+    this.generation += 1;
+    this.analysisPending = false;
+    this.worker?.terminate();
+    this.worker = undefined;
   }
 
   result(): RollingResult {
     return this.current;
   }
 
+  input(): InputLevel {
+    const buffered = this.sampleRate ? (this.ring?.length ?? 0) / this.sampleRate : 0;
+    // Oldest-first for drawing, since the store is a ring.
+    const ordered = new Float32Array(WAVEFORM_POINTS);
+    for (let i = 0; i < WAVEFORM_POINTS; i += 1) {
+      ordered[i] = this.waveform[(this.waveformAt + i) % WAVEFORM_POINTS]!;
+    }
+    return {
+      rms: this.rms,
+      peak: this.peak,
+      peakHold: this.peakHold,
+      receiving: this.receiving,
+      secondsBuffered: buffered,
+      secondsCaptured: this.sampleRate ? this.totalSamples / this.sampleRate : 0,
+      secondsUntilFirstReading: Math.max(0, MINIMUM_SECONDS - buffered),
+      waveform: ordered,
+      ...(this.lastDiagnostics ? { keyDiagnostics: this.lastDiagnostics } : {}),
+    };
+  }
+
   reset(): void {
+    this.generation += 1;
+    this.analysisPending = false;
     this.frames = [];
     this.ring?.clear();
     this.samplesSinceFrame = 0;
     this.current = aggregateFrames([]);
+    this.receiving = false;
+    this.rms = 0;
+    this.peak = 0;
+    this.peakHold = 0;
+    this.waveform.fill(0);
+    this.waveformAt = 0;
+    this.lastDiagnostics = undefined;
+    this.totalSamples = 0;
+  }
+
+  /** Level and waveform for the current chunk. Runs on every chunk. */
+  private measure(samples: Float32Array): void {
+    this.receiving = true;
+    let sum = 0;
+    let peak = 0;
+    for (const sample of samples) {
+      sum += sample * sample;
+      const magnitude = Math.abs(sample);
+      if (magnitude > peak) peak = magnitude;
+    }
+    this.rms = samples.length ? Math.sqrt(sum / samples.length) : 0;
+    this.peak = peak;
+    // Decay the hold slowly so a transient stays visible without sticking.
+    this.peakHold = Math.max(peak, this.peakHold * 0.97);
+    this.waveform[this.waveformAt] = peak;
+    this.waveformAt = (this.waveformAt + 1) % WAVEFORM_POINTS;
   }
 
   onFrame(listener: (frame: AnalysisFrame, result: RollingResult) => void): () => void {
@@ -589,38 +1411,75 @@ class RollingAudioAnalyser implements Analyser {
   private ingest(chunk: AudioChunk): void {
     if (this.sampleRate !== chunk.sampleRate || !this.ring) {
       this.sampleRate = chunk.sampleRate;
-      // Stability comes from the series of overlapping results. Keeping only
-      // the most recent 16 seconds also prevents each two-second pass getting
-      // progressively more expensive during a long listening session.
+      // Each analysis window remains bounded, while the rolling vote now keeps
+      // up to 60 seconds of two-second observations. This gives long captures
+      // more evidence without repeatedly FFTing an ever-growing raw buffer.
       this.ring = new SampleRing(Math.ceil(chunk.sampleRate * 16));
       this.samplesSinceFrame = 0;
     }
+    this.measure(chunk.samples);
+    this.totalSamples += chunk.samples.length;
     this.ring.push(chunk.samples);
     this.samplesSinceFrame += chunk.samples.length;
-    const minimum = chunk.sampleRate * 6;
+    const minimum = chunk.sampleRate * MINIMUM_SECONDS;
     const interval = chunk.sampleRate * 2;
     if (this.ring.length < minimum || this.samplesSinceFrame < interval) return;
     this.samplesSinceFrame = 0;
 
-    const detection = analysePcm(this.ring.snapshot(), chunk.sampleRate);
+    this.scheduleAnalysis(this.ring.snapshot(), chunk.sampleRate, chunk.at);
+  }
+
+  private emitDetection(detection: Detection, at: number): void {
     const frame: AnalysisFrame = {
-      at: chunk.at,
+      at,
       ...detection,
       camelot: detection.key ? musicalKeyToCamelot(detection.key) ?? undefined : undefined,
     };
+    this.lastDiagnostics = detection.keyDiagnostics;
     this.frames.push(frame);
     this.current = aggregateFrames(this.frames);
     for (const listener of this.listeners) listener(frame, this.current);
   }
+
+  private scheduleAnalysis(samples: Float32Array, sampleRate: number, at: number): void {
+    if (this.analysisPending) return;
+    const generation = this.generation;
+
+    // Unit tests and older browsers use the synchronous fallback. Production
+    // browsers process FFT/autocorrelation work off the UI thread.
+    if (typeof Worker === 'undefined') {
+      this.emitDetection(analysePcm(samples, sampleRate, this.profile), at);
+      return;
+    }
+
+    if (!this.worker) {
+      this.worker = new Worker(new URL('./analysis-worker.ts', import.meta.url), { type: 'module' });
+      this.worker.onmessage = (event: MessageEvent<{ detection: Detection; at: number; generation: number }>) => {
+        this.analysisPending = false;
+        if (event.data.generation !== this.generation) return;
+        this.emitDetection(event.data.detection, event.data.at);
+      };
+      this.worker.onerror = () => {
+        this.analysisPending = false;
+        this.worker?.terminate();
+        this.worker = undefined;
+      };
+    }
+    this.analysisPending = true;
+    this.worker.postMessage(
+      { samples: samples.buffer, sampleRate, profile: this.profile, at, generation },
+      [samples.buffer],
+    );
+  }
 }
 
-export function createAudioSource(kind: AudioSourceKind = 'microphone'): AudioSource {
+export function createAudioSource(kind: AudioSourceKind = 'microphone', deviceId?: string): AudioSource {
   if (kind !== 'microphone') {
     throw new MicrophoneAnalysisError(`${kind} audio sources are not available in this build.`);
   }
-  return new MicrophoneAudioSource();
+  return new MicrophoneAudioSource(deviceId);
 }
 
-export function createAnalyser(): Analyser {
-  return new RollingAudioAnalyser();
+export function createAnalyser(profile: AnalysisProfile = 'general'): Analyser {
+  return new RollingAudioAnalyser(profile);
 }

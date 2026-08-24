@@ -3,6 +3,9 @@ import type { AnalysisCandidate, DataSource, Recording, Release, Track } from '@
 import { scoreIdentity } from '@/enrichment/matching';
 import { applyResolution, candidateConflicts, mergeCandidates, resolveMatches } from '@/enrichment/resolution';
 import { attemptsForRun, runEnrichment } from '@/enrichment/runner';
+import { OpenAnalysisProvider } from '@/enrichment/open-analysis-provider';
+import { availableProviders, providers } from '@/enrichment/registry';
+import { REQUEST_TIMEOUT_MS } from '@/enrichment/provider';
 import type {
   EnrichmentProvider,
   MatchContext,
@@ -576,5 +579,111 @@ describe('provider runner', () => {
     await expect(runEnrichment(context(), [cancelling], { signal: controller.signal })).rejects.toMatchObject({
       name: 'AbortError',
     });
+  });
+});
+
+describe('provider configuration gates', () => {
+  it('treats the MusicBrainz adapter as unconfigured without a contact', () => {
+    // Regression: this adapter had no configured() method, so
+    // availableProviders fell back to "configured", queried it on every
+    // track, and lookup() threw each time — burning the run's error budget
+    // and stopping the batch at the circuit breaker.
+    const provider = new OpenAnalysisProvider({
+      musicBrainzBaseUrl: 'https://example.invalid/mb',
+      acousticBrainzBaseUrl: 'https://example.invalid/ab',
+    });
+    expect(provider.available).toBe(true);
+    expect(provider.configured?.({})).toBe(false);
+    expect(provider.configured?.({ contact: '   ' })).toBe(false);
+    expect(provider.configured?.({ contact: 'dj@example.com' })).toBe(true);
+  });
+
+  it('excludes an unconfigured provider from the available set', () => {
+    // Nothing may query a provider that cannot work. Spec invariant.
+    const withoutContact = availableProviders({}).map((provider) => provider.id);
+    expect(withoutContact).not.toContain('musicbrainz-acousticbrainz');
+
+    const withContact = availableProviders({ contact: 'dj@example.com' }).map((p) => p.id);
+    // Only assert the gate, not the transport: `available` depends on whether
+    // this build has a metadata proxy configured.
+    const provider = providers.find((p) => p.id === 'musicbrainz-acousticbrainz')!;
+    if (provider.available) expect(withContact).toContain('musicbrainz-acousticbrainz');
+  });
+
+  it('never queries an unconfigured provider through the runner', async () => {
+    let queried = false;
+    const provider = new OpenAnalysisProvider({
+      musicBrainzBaseUrl: 'https://example.invalid/mb',
+      acousticBrainzBaseUrl: 'https://example.invalid/ab',
+      fetchImpl: (async () => {
+        queried = true;
+        throw new Error('should not be reached');
+      }) as unknown as typeof fetch,
+    });
+
+    const run = await runEnrichment(context(), [provider], {});
+    expect(queried).toBe(false);
+    // No durable attempt either: an unconfigured source has not "checked" anything.
+    expect(run.providers).toHaveLength(0);
+    expect(run.failures).toHaveLength(0);
+  });
+});
+
+describe('stalled requests', () => {
+  /**
+   * Regression: nothing in the enrichment layer had a request timeout, so a
+   * stalled upstream left runEnrichment permanently pending. The batch sat on
+   * its first track showing no progress and no error, which read as a freeze.
+   */
+  const neverResponds = () =>
+    new OpenAnalysisProvider({
+      musicBrainzBaseUrl: 'https://example.invalid/mb',
+      acousticBrainzBaseUrl: 'https://example.invalid/ab',
+      // A fetch that only settles when aborted, like a dead socket.
+      fetchImpl: ((_url: string, init?: RequestInit) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError')),
+          );
+        })) as unknown as typeof fetch,
+    });
+
+  it('gives up on a stalled provider instead of hanging', async () => {
+    vi.useFakeTimers();
+    try {
+      const promise = neverResponds().lookup(context(), { contact: 'dj@example.com' });
+      const assertion = expect(promise).rejects.toThrow(/did not respond in time/i);
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 100);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('records the stall as a provider failure so the batch continues', async () => {
+    vi.useFakeTimers();
+    try {
+      const provider = neverResponds();
+      const promise = runEnrichment(context(), [provider], { contact: 'dj@example.com' });
+      await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS + 100);
+      const run = await promise;
+      // The run RESOLVES: one dead source must not take the whole batch down.
+      expect(run.failures).toHaveLength(1);
+      expect(run.failures[0]!.message).toMatch(/did not respond in time/i);
+      expect(run.matches).toEqual([]);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('still lets a user Stop propagate rather than reporting a timeout', async () => {
+    const controller = new AbortController();
+    const provider = neverResponds();
+    const promise = provider.lookup(context(), {
+      contact: 'dj@example.com',
+      signal: controller.signal,
+    });
+    controller.abort();
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' });
   });
 });

@@ -11,6 +11,7 @@ import type {
   ProviderIdentity,
   ProviderResult,
 } from './provider';
+import { asArray, withTimeout } from './provider';
 
 interface GetSongBpmArtist {
   name?: string;
@@ -34,7 +35,8 @@ interface GetSongBpmSong {
 }
 
 interface GetSongBpmSearchResponse {
-  search?: GetSongBpmSong[];
+  /** Unknown on purpose: the service also returns an error object here. */
+  search?: GetSongBpmSong[] | { error?: string };
 }
 
 export interface GetSongBpmProviderOptions {
@@ -159,16 +161,25 @@ export class GetSongBpmProvider implements EnrichmentProvider {
 
     const lookup = `song:${context.track.title} artist:${context.track.artist}`;
     const params = new URLSearchParams({ type: 'both', lookup, limit: '5' });
-    const response = await this.fetchImpl(
-      `${this.baseUrl}/search/?${params}`,
-      {
-        headers: {
-          Accept: 'application/json',
-          'X-API-KEY': apiKey,
+    const gate = withTimeout(options.signal);
+    let response: Response;
+    try {
+      response = await this.fetchImpl(
+        `${this.baseUrl}/search/?${params}`,
+        {
+          headers: {
+            Accept: 'application/json',
+            'X-API-KEY': apiKey,
+          },
+          signal: gate.signal,
         },
-        signal: options.signal,
-      },
-    );
+      );
+    } catch (error) {
+      if (gate.timedOut()) throw new Error('GetSongBPM did not respond in time.');
+      throw error;
+    } finally {
+      gate.release();
+    }
     if (!response.ok) {
       throw new Error(
         response.status === 401 || response.status === 403
@@ -177,7 +188,21 @@ export class GetSongBpmProvider implements EnrichmentProvider {
       );
     }
 
-    const songs = ((await response.json()) as GetSongBpmSearchResponse).search ?? [];
+    // GetSongBPM signals a miss as `{"search": {"error": "no result"}}` rather
+    // than an empty array, so the shape must be checked, not asserted.
+    const body = (await response.json()) as GetSongBpmSearchResponse;
+    const raw = body.search;
+    if (raw && !Array.isArray(raw)) {
+      const message = (raw as { error?: unknown }).error;
+      const text = typeof message === 'string' ? message.trim().toLowerCase() : '';
+      // "no result" is a legitimate answer, not a failure: returning [] records
+      // a clean `none` attempt instead of burning the run's error budget.
+      if (text && text !== 'no result' && text !== 'no results') {
+        throw new Error(`GetSongBPM: ${message}`);
+      }
+      return [];
+    }
+    const songs = asArray<GetSongBpmSong>(raw);
     return songs
       .map((song) => this.mapResult(context, song))
       .filter((result): result is ProviderResult => Boolean(result));

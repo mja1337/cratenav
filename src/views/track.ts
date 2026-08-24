@@ -24,6 +24,7 @@ import { pitchSimulator } from '@/components/pitch-simulator';
 import { asPlaybackTarget, nativeBpmOf, nativeKeyOf } from '@/pitch/native';
 import { recommendationList } from '@/components/recommendations';
 import { createLiveAudioAnalysis } from '@/components/live-audio-analysis';
+import { onlineLookupPanel } from '@/components/online-lookup';
 import { clear, h } from '@/utils/dom';
 
 /**
@@ -57,6 +58,7 @@ export function createTrackView(store: Store, router: Router, trackId: string): 
   const release = store.getRelease(track.releaseId);
   const element = h('div', { class: 'container stack' });
   let scope: RecommendationScope = 'active-bag';
+  let comparisonTrackId: string | undefined;
   let renderReady = false;
   const liveAnalysis = createLiveAudioAnalysis(store, track, release, () => {
     if (renderReady) render();
@@ -70,12 +72,23 @@ export function createTrackView(store: Store, router: Router, trackId: string): 
     element.append(
       header(track!, release?.title, release?.artist),
       megaPanels(analysis),
+      onlineLookupPanel(store, {
+        targets: () => {
+          const entry = store.trackEntry(track!.id);
+          return entry ? [entry] : [];
+        },
+        subject: 'this track',
+      }),
       liveAnalysis.panel(notation),
+      trackNotes(store, track!, analysis),
       playStateControls(store, track!),
       nextTrackBlock(store, router, track!, analysis, notation, scope, (next) => {
         scope = next;
         render();
-      }),
+      }, (next) => {
+        comparisonTrackId = next;
+        render();
+      }, comparisonTrackId),
       bpmControls(store, track!, analysis),
       keyControls(store, track!, analysis, notation, render),
       simulatorBlock(store, analysis, notation),
@@ -94,6 +107,34 @@ export function createTrackView(store: Store, router: Router, trackId: string): 
       liveAnalysis.destroy();
     },
   };
+}
+
+function trackNotes(store: Store, track: Track, analysis: TrackAnalysis | undefined): HTMLElement {
+  const input = h('textarea', {
+    id: 'track-notes', name: 'trackNotes', class: 'textarea', rows: '3',
+    placeholder: 'Mix points, cue notes, crowd response…', value: analysis?.mixNotes ?? '',
+  });
+  const button = h('button', { class: 'button button--small button--primary', type: 'button', text: 'Save note' });
+  button.onclick = async () => {
+    button.setAttribute('disabled', '');
+    button.textContent = 'Saving…';
+    try {
+      await store.updateAnalysis(track.id, {
+        ...baseAnalysis(analysis, track.id),
+        mixNotes: input.value.trim() || undefined,
+      });
+    } catch {
+      button.removeAttribute('disabled');
+      button.textContent = 'Try saving again';
+    }
+  };
+  return h(
+    'section', { class: 'card stack stack--tight' },
+    h('h2', { class: 'section-title', text: 'Track note' }),
+    h('label', { for: 'track-notes', class: 'field__label', text: 'Your note' }),
+    input,
+    h('div', { class: 'row' }, button),
+  );
 }
 
 function header(track: Track, releaseTitle?: string, releaseArtist?: string): HTMLElement {
@@ -189,6 +230,8 @@ function nextTrackBlock(
   notation: 'camelot' | 'musical',
   scope: RecommendationScope,
   onScopeChange: (scope: RecommendationScope) => void,
+  onCompare: (trackId: string) => void,
+  comparisonTrackId?: string,
 ): HTMLElement {
   const hasAnything = analysis?.canonicalBpm !== undefined || analysis?.camelotKey !== undefined;
   if (!hasAnything) {
@@ -229,6 +272,8 @@ function nextTrackBlock(
       tolerance: store.pitchTolerance,
     },
   );
+  const comparison = results.find((result) => result.entry.track.id === comparisonTrackId) ?? results[0];
+  const comparisonKey = comparison?.pitch?.effectiveCamelot ?? comparison?.entry.analysis?.camelotKey;
 
   const scopeButton = (value: RecommendationScope, label: string, disabled = false) =>
     h('button', {
@@ -250,8 +295,27 @@ function nextTrackBlock(
       scopeButton('active-bag', bag ? `Bag: ${bag.name}` : 'No active bag', !bag),
       scopeButton('collection', 'Whole collection'),
     ),
+    comparison && analysis?.camelotKey && comparisonKey
+      ? h(
+          'div',
+          { class: 'mix-wheel stack stack--tight' },
+          h('h3', { class: 'section-title', text: 'Harmonic comparison' }),
+          keyWheel({
+            selected: analysis.camelotKey,
+            comparison: comparisonKey,
+            notation,
+            size: 230,
+            centreLabel: `${formatCamelot(analysis.camelotKey)} → ${formatCamelot(comparisonKey)}`,
+          }),
+          h('div', { class: 'mix-wheel__legend' },
+            h('span', { class: 'mix-wheel__current', text: `Current: ${formatCamelot(analysis.camelotKey)}` }),
+            h('span', { class: 'mix-wheel__next', text: `Next: ${comparison.entry.track.title} · ${formatCamelot(comparisonKey)}` }),
+          ),
+        )
+      : null,
     recommendationList(results, notation, (recommendation) =>
       router.navigate(`track/${recommendation.entry.track.id}`),
+    (recommendation) => onCompare(recommendation.entry.track.id), comparison?.entry.track.id,
     ),
     effectiveScope === 'collection'
       ? h('p', {
@@ -626,11 +690,21 @@ function candidateList(
   track: Track,
   analysis: TrackAnalysis,
 ): HTMLElement {
+  const titleKey = (value: string | undefined) => (value ?? '').normalize('NFKD')
+    .replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+  const matching = analysis.candidates.filter(
+    (candidate) => titleKey(candidate.matchedTitle) === titleKey(track.title),
+  );
+  if (!matching.length) return h('p', {
+    class: 'field__hint',
+    text: 'No source result matches this track title. Results for other tracks on the release are hidden.',
+  });
+
   return h(
     'div',
     { class: 'stack stack--tight' },
     h('h3', { class: 'section-title', text: 'Source candidates' }),
-    ...analysis.candidates.map((candidate) => {
+    ...matching.map((candidate, index) => {
       const identityConfidence = candidate.matchScore ?? candidate.confidence;
       const bpmConfidence = Math.min(
         candidate.bpmConfidence ?? candidate.confidence,
@@ -652,6 +726,39 @@ function candidateList(
         candidate.canonicalBpm !== undefined ? `BPM ${Math.round(bpmConfidence * 100)}%` : undefined,
         (candidate.canonicalKey || camelot) ? `key ${Math.round(keyConfidence * 100)}%` : undefined,
       ].filter(Boolean).join(' · ');
+      const commentId = `source-review-${candidate.providerId ?? candidate.source}-${index}`;
+      const comment = h('textarea', {
+        id: commentId, name: commentId, class: 'textarea candidate-row__comment', rows: '2',
+        placeholder: 'Why is this source right or wrong?', value: candidate.reviewComment ?? '',
+      });
+      const review = async (reviewStatus: 'approved' | 'rejected') => {
+        const candidates = analysis.candidates.map((item) => item === candidate ? {
+          ...item,
+          reviewStatus,
+          reviewComment: comment.value.trim() || undefined,
+          reviewedAt: new Date().toISOString(),
+        } : item);
+        const patch: Partial<TrackAnalysis> = { candidates };
+        if (reviewStatus === 'approved') {
+          patch.analysisMethod = `External candidate approved by user${comment.value.trim() ? `: ${comment.value.trim()}` : ''}`;
+          if (candidate.canonicalBpm !== undefined) Object.assign(patch, {
+            sourceBpm: candidate.sourceBpm ?? candidate.canonicalBpm,
+            canonicalBpm: candidate.canonicalBpm,
+            nativeBpm: candidate.nativeBpm ?? candidate.canonicalBpm,
+            bpmSource: candidate.source, bpmConfidence, verifiedBpm: true,
+            normalisationReason: candidate.normalisationReason,
+          });
+          if (candidate.canonicalKey || camelot) Object.assign(patch, {
+            sourceKey: candidate.sourceKey, canonicalKey: candidate.canonicalKey, camelotKey: camelot,
+            nativeKey: candidate.nativeKey ?? candidate.canonicalKey,
+            nativeCamelot: candidate.nativeCamelot ?? camelot,
+            nativePitchClass: candidate.nativePitchClass,
+            nativeMode: candidate.nativeMode ?? candidate.canonicalKey?.tonality,
+            keySource: candidate.source, keyConfidence, verifiedKey: true,
+          });
+        }
+        await store.updateAnalysis(track.id, patch);
+      };
       return h(
         'div',
         { class: 'candidate-row' },
@@ -689,44 +796,16 @@ function candidateList(
                 text: 'Review source match',
               })
             : null,
+          candidate.reviewStatus
+            ? h('div', { class: `state state--${candidate.reviewStatus === 'approved' ? 'READY' : 'CONFLICT'}`, text: candidate.reviewStatus })
+            : null,
+          h('label', { for: commentId, class: 'field__label', text: 'Validation comment' }),
+          comment,
         ),
-        h('button', {
-          class: 'button button--small candidate-row__action',
-          type: 'button',
-          text: 'Use values',
-          title: 'Choose this source claim and mark its supplied values as verified',
-          onclick: () => {
-            const patch: Partial<TrackAnalysis> = {
-              analysisMethod: 'External candidate chosen by user',
-            };
-            if (candidate.canonicalBpm !== undefined) {
-              Object.assign(patch, {
-                sourceBpm: candidate.sourceBpm ?? candidate.canonicalBpm,
-                canonicalBpm: candidate.canonicalBpm,
-                nativeBpm: candidate.nativeBpm ?? candidate.canonicalBpm,
-                bpmSource: candidate.source,
-                bpmConfidence,
-                verifiedBpm: true,
-                normalisationReason: candidate.normalisationReason,
-              });
-            }
-            if (candidate.canonicalKey || camelot) {
-              Object.assign(patch, {
-                sourceKey: candidate.sourceKey,
-                canonicalKey: candidate.canonicalKey,
-                camelotKey: camelot,
-                nativeKey: candidate.nativeKey ?? candidate.canonicalKey,
-                nativeCamelot: candidate.nativeCamelot ?? camelot,
-                nativePitchClass: candidate.nativePitchClass,
-                nativeMode: candidate.nativeMode ?? candidate.canonicalKey?.tonality,
-                keySource: candidate.source,
-                keyConfidence,
-                verifiedKey: true,
-              });
-            }
-            void store.updateAnalysis(track.id, patch);
-          },
-        }),
+        h('div', { class: 'candidate-row__actions' },
+          h('button', { class: 'button button--small button--primary', type: 'button', text: 'Approve', onclick: () => void review('approved') }),
+          h('button', { class: 'button button--small button--danger', type: 'button', text: 'Reject', onclick: () => void review('rejected') }),
+        ),
       );
     }),
   );

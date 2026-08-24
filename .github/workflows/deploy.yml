@@ -38,6 +38,8 @@ jobs:
           # Leave unset while Pages is static-only. When a read-only Worker is
           # deployed, add its origin as the VITE_METADATA_PROXY_BASE repository variable.
           VITE_METADATA_PROXY_BASE: ${{ vars.VITE_METADATA_PROXY_BASE }}
+          # Public OAuth client id (not a secret) for cross-platform Drive backups.
+          VITE_GOOGLE_DRIVE_CLIENT_ID: ${{ vars.VITE_GOOGLE_DRIVE_CLIENT_ID }}
 
       - uses: actions/configure-pages@v5
 

@@ -5,7 +5,8 @@ import type { View } from './types';
 import { cover } from '@/components/cover';
 import { stat } from '@/components/badges';
 import { artworkUrl, formatBpm, formatCount, formatKeyFor } from '@/components/format';
-import { formatCamelot } from '@/harmonic/camelot';
+import { allCamelotKeys, camelotToMusicalKey, formatCamelot, formatMusicalKey, parseCamelot } from '@/harmonic/camelot';
+import { compatibleKeys } from '@/harmonic/compatibility';
 import { icon } from '@/components/icons';
 import { clear, h } from '@/utils/dom';
 import { hasUnconfirmedAnalysis } from '@/analysis/verification';
@@ -37,7 +38,15 @@ interface Filters {
   inActiveBag: boolean;
   /** Inclusive canonical-BPM window, or null for no constraint. */
   bpmBand: [number, number] | null;
+  /** Camelot label, e.g. "8A". */
   camelot: string | null;
+  /**
+   * Widen a key filter to the harmonically safe neighbours: same key, one step
+   * either way, and the relative major/minor. This is the whole point of
+   * filtering by key for a DJ — you want what will mix, not just what matches.
+   */
+  relatedKeys: boolean;
+  label: string | null;
 }
 
 export function createLibraryView(store: Store, router: Router): View {
@@ -55,6 +64,8 @@ export function createLibraryView(store: Store, router: Router): View {
     inActiveBag: false,
     bpmBand: null,
     camelot: null,
+    relatedKeys: true,
+    label: null,
   };
 
   const results = h('div', { class: 'stack' });
@@ -121,6 +132,53 @@ export function createLibraryView(store: Store, router: Router): View {
 
   const filterRow = h('div', { class: 'toolbar__filters' });
 
+  const keySelect = h(
+    'select',
+    {
+      class: 'select',
+      id: 'library-key',
+      name: 'library-key',
+      'aria-label': 'Filter by key',
+      onchange: (event: Event) => {
+        filters.camelot = (event.target as HTMLSelectElement).value || null;
+        render();
+      },
+    },
+  ) as HTMLSelectElement;
+
+  const relatedToggle = h('button', {
+    class: 'chip',
+    type: 'button',
+    onclick: () => {
+      filters.relatedKeys = !filters.relatedKeys;
+      render();
+    },
+  });
+
+  const labelSelect = h(
+    'select',
+    {
+      class: 'select',
+      id: 'library-label',
+      name: 'library-label',
+      'aria-label': 'Filter by label',
+      onchange: (event: Event) => {
+        filters.label = (event.target as HTMLSelectElement).value || null;
+        render();
+      },
+    },
+  ) as HTMLSelectElement;
+
+  const selectRow = h(
+    'div',
+    { class: 'toolbar__selects' },
+    h('div', { class: 'toolbar__field' }, h('label', { class: 'toolbar__label', for: 'library-key', text: 'Key' }), keySelect),
+    relatedToggle,
+    h('div', { class: 'toolbar__field' }, h('label', { class: 'toolbar__label', for: 'library-label', text: 'Label' }), labelSelect),
+  );
+
+  const keyHint = h('p', { class: 'field__hint' });
+
   const toolbar = h(
     'div',
     { class: 'toolbar' },
@@ -133,10 +191,39 @@ export function createLibraryView(store: Store, router: Router): View {
       modeButton('list', 'List', 'list'),
       modeButton('crate', 'Crate', 'crate'),
     ),
+    selectRow,
     filterRow,
   );
 
   // --- rendering -----------------------------------------------------------
+
+  /**
+   * The set of Camelot labels a key filter accepts.
+   *
+   * With related keys on this is the selected key plus its safe neighbours, so
+   * the result is "records I could mix in this key" rather than only exact
+   * matches — which for one key across a 550-record collection is usually a
+   * handful.
+   */
+  function keyFilterSet(): Set<string> {
+    if (!filters.camelot) return new Set();
+    const selected = parseCamelot(filters.camelot);
+    if (!selected) return new Set([filters.camelot]);
+    if (!filters.relatedKeys) return new Set([formatCamelot(selected)]);
+    return new Set(compatibleKeys(selected).map(formatCamelot));
+  }
+
+  /** Labels present in the collection, most-released first. */
+  function topLabels(releases: readonly Release[]): { name: string; count: number }[] {
+    const counts = new Map<string, number>();
+    for (const release of releases) {
+      const label = release.label?.trim();
+      if (label) counts.set(label, (counts.get(label) ?? 0) + 1);
+    }
+    return [...counts.entries()]
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+  }
 
   /** Release ids with at least one copy in the active bag. */
   function packedReleaseIds(): Set<string> {
@@ -193,10 +280,12 @@ export function createLibraryView(store: Store, router: Router): View {
       }
     }
     if (filters.camelot) {
-      if (!analyses.some((a) => a?.camelotKey && formatCamelot(a.camelotKey) === filters.camelot)) {
+      const wanted = keyFilterSet();
+      if (!analyses.some((a) => a?.camelotKey && wanted.has(formatCamelot(a.camelotKey)))) {
         return false;
       }
     }
+    if (filters.label && release.label !== filters.label) return false;
     if (filters.inActiveBag && !packedReleaseIds().has(release.id)) return false;
 
     const query = filters.query.trim().toLowerCase();
@@ -412,6 +501,64 @@ export function createLibraryView(store: Store, router: Router): View {
       );
     }
 
+    // Key options: only keys that actually occur, so the list stays honest and
+    // short. Camelot order, with the musical name alongside.
+    const keyCounts = new Map<string, number>();
+    for (const release of releases) {
+      for (const track of store.tracksFor(release.id)) {
+        const camelot = store.analysisFor(track.id)?.camelotKey;
+        if (camelot) {
+          const label = formatCamelot(camelot);
+          keyCounts.set(label, (keyCounts.get(label) ?? 0) + 1);
+        }
+      }
+    }
+    const keyOptions = allCamelotKeys()
+      .filter((key) => keyCounts.has(formatCamelot(key)))
+      .sort((a, b) => a.number - b.number || a.letter.localeCompare(b.letter));
+
+    clear(keySelect);
+    keySelect.append(
+      h('option', { value: '', text: keyOptions.length ? 'Any key' : 'No keys set yet' }),
+      ...keyOptions.map((key) => {
+        const label = formatCamelot(key);
+        const musical = camelotToMusicalKey(key);
+        return h('option', {
+          value: label,
+          selected: filters.camelot === label,
+          text: `${label}${musical ? ` · ${formatMusicalKey(musical)}` : ''} (${keyCounts.get(label)})`,
+        });
+      }),
+    );
+    keySelect.disabled = !keyOptions.length;
+
+    relatedToggle.textContent = filters.relatedKeys ? 'Related keys on' : 'Exact key only';
+    relatedToggle.setAttribute('aria-pressed', String(filters.relatedKeys));
+    relatedToggle.title = filters.relatedKeys
+      ? 'Including the harmonically safe neighbours: same key, one step either way, and the relative major/minor'
+      : 'Matching the selected key exactly';
+    relatedToggle.hidden = !filters.camelot;
+
+    clear(keyHint);
+    if (filters.camelot && filters.relatedKeys) {
+      const accepted = [...keyFilterSet()];
+      keyHint.textContent = `Showing records that mix with ${filters.camelot}: ${accepted.join(', ')}.`;
+    }
+
+    const labels = topLabels(releases);
+    clear(labelSelect);
+    labelSelect.append(
+      h('option', { value: '', text: labels.length ? 'Any label' : 'No labels' }),
+      ...labels.map((entry) =>
+        h('option', {
+          value: entry.name,
+          selected: filters.label === entry.name,
+          text: `${entry.name} (${entry.count})`,
+        }),
+      ),
+    );
+    labelSelect.disabled = !labels.length;
+
     const visible = sorted(releases.filter(matches));
 
     clear(results);
@@ -432,7 +579,9 @@ export function createLibraryView(store: Store, router: Router): View {
       !filters.verifiedOnly &&
       !filters.unconfirmedAnalysis &&
       !filters.inActiveBag &&
-      !filters.bpmBand;
+      !filters.bpmBand &&
+      !filters.camelot &&
+      !filters.label;
     if (resting) results.append(dashboard(store, router));
 
     summary.textContent =
@@ -461,6 +610,8 @@ export function createLibraryView(store: Store, router: Router): View {
               filters.inActiveBag = false;
               filters.bpmBand = null;
               filters.camelot = null;
+              filters.relatedKeys = true;
+              filters.label = null;
               search.value = '';
               render();
             },
@@ -479,7 +630,7 @@ export function createLibraryView(store: Store, router: Router): View {
     }
   }
 
-  element.append(toolbar, summary, results);
+  element.append(toolbar, summary, keyHint, results);
 
   const unsubscribe = store.subscribe(() => render());
   render();

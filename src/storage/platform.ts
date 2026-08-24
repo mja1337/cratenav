@@ -7,6 +7,12 @@
  * be registered alongside them later.
  */
 
+import { createBackupFileAccess, type BackupFileAccess } from './backup';
+import {
+  createGoogleDriveBackupAccess,
+  type GoogleDriveBackupAccess,
+} from './google-drive-backup';
+
 export interface DeviceInfo {
   /** Stable per-device identifier, used for sync conflict attribution. */
   deviceId: string;
@@ -149,6 +155,9 @@ export interface Platform {
   device: DeviceInfo;
   wakeLock: ScreenWakeLock;
   files: FileAccess;
+  /** Optional because native/test platforms may provide their own backup implementation later. */
+  backup?: BackupFileAccess;
+  googleDriveBackup?: GoogleDriveBackupAccess;
   share: ShareTarget;
 }
 
@@ -157,6 +166,10 @@ export function createBrowserPlatform(): Platform {
     device: createDeviceInfo(),
     wakeLock: createWakeLock(),
     files: createFileAccess(),
+    backup: createBackupFileAccess(),
+    googleDriveBackup: createGoogleDriveBackupAccess(
+      import.meta.env.VITE_GOOGLE_DRIVE_CLIENT_ID as string | undefined,
+    ),
     share: createShareTarget(),
   };
 }

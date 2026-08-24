@@ -11,6 +11,7 @@ import type {
   ProviderIdentity,
   ProviderResult,
 } from './provider';
+import { asArray, withTimeout } from './provider';
 
 interface MusicBrainzArtistCredit {
   name?: string;
@@ -167,6 +168,19 @@ export class OpenAnalysisProvider implements EnrichmentProvider {
     this.acousticBrainzBaseUrl = (acousticBrainzBaseUrl ?? '').replace(/\/$/, '');
   }
 
+  /**
+   * Configuration gate. MusicBrainz requires an application contact in the
+   * User-Agent, so without one this provider is not usable.
+   *
+   * This must exist, not just be enforced inside `lookup`: `availableProviders`
+   * falls back to "configured" when the method is absent, so the provider was
+   * being offered as ready, queried once per track, and throwing every time —
+   * which burned the run's error budget and tripped the circuit breaker.
+   */
+  configured(options: EnrichmentLookupOptions = {}): boolean {
+    return Boolean(cleanContact(options.contact));
+  }
+
   async lookup(
     context: MatchContext,
     options: EnrichmentLookupOptions = {},
@@ -204,12 +218,23 @@ export class OpenAnalysisProvider implements EnrichmentProvider {
 
     const query = `artist:"${lucenePhrase(context.track.artist)}" AND recording:"${lucenePhrase(context.track.title)}"`;
     const params = new URLSearchParams({ query, fmt: 'json', limit: '5' });
-    const response = await this.fetchImpl(
-      `${this.musicBrainzBaseUrl}/ws/2/recording/?${params}`,
-      { headers: requestHeaders(contact), signal },
-    );
-    if (!response.ok) throw new Error(`MusicBrainz lookup failed (${response.status}).`);
-    return ((await response.json()) as MusicBrainzSearchResponse).recordings ?? [];
+    const gate = withTimeout(signal);
+    try {
+      const response = await this.fetchImpl(
+        `${this.musicBrainzBaseUrl}/ws/2/recording/?${params}`,
+        { headers: requestHeaders(contact), signal: gate.signal },
+      );
+      if (!response.ok) throw new Error(`MusicBrainz lookup failed (${response.status}).`);
+      return asArray<MusicBrainzRecording>(
+        ((await response.json()) as MusicBrainzSearchResponse).recordings,
+      );
+    } catch (error) {
+      // A stall must become a recorded failure, not a wedged batch.
+      if (gate.timedOut()) throw new Error('MusicBrainz did not respond in time.');
+      throw error;
+    } finally {
+      gate.release();
+    }
   }
 
   private async acoustic(
@@ -223,12 +248,21 @@ export class OpenAnalysisProvider implements EnrichmentProvider {
       recording_ids: missing.join(';'),
       features: 'rhythm.bpm;tonal.key_key;tonal.key_scale;tonal.key_strength',
     });
-    const response = await this.fetchImpl(
-      `${this.acousticBrainzBaseUrl}/api/v1/low-level?${params}`,
-      { headers: { Accept: 'application/json' }, signal },
-    );
-    if (!response.ok) throw new Error(`AcousticBrainz lookup failed (${response.status}).`);
-    const payload = (await response.json()) as AcousticBrainzBulkResponse;
+    const gate = withTimeout(signal);
+    let payload: AcousticBrainzBulkResponse;
+    try {
+      const response = await this.fetchImpl(
+        `${this.acousticBrainzBaseUrl}/api/v1/low-level?${params}`,
+        { headers: { Accept: 'application/json' }, signal: gate.signal },
+      );
+      if (!response.ok) throw new Error(`AcousticBrainz lookup failed (${response.status}).`);
+      payload = (await response.json()) as AcousticBrainzBulkResponse;
+    } catch (error) {
+      if (gate.timedOut()) throw new Error('AcousticBrainz did not respond in time.');
+      throw error;
+    } finally {
+      gate.release();
+    }
     for (const id of missing) this.acousticCache.set(id, extractBulkAnalysis(payload[id]));
   }
 

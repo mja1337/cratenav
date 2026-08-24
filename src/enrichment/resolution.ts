@@ -141,7 +141,9 @@ export function candidateConflicts(
   candidates: readonly AnalysisCandidate[],
 ): { bpm: boolean; key: boolean } {
   const credible = candidates.filter(
-    (candidate) => (candidate.matchScore ?? 0) >= ENRICHMENT_THRESHOLDS.verify,
+    (candidate) =>
+      candidate.reviewStatus !== 'rejected' &&
+      (candidate.matchScore ?? 0) >= ENRICHMENT_THRESHOLDS.verify,
   );
   const conflicts = { bpm: false, key: false };
   for (let i = 0; i < credible.length; i += 1) {

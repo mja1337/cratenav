@@ -172,3 +172,45 @@ describe('GetSongBPM provider', () => {
     expect(sleepImpl.mock.calls[0]?.[0]).toBeGreaterThan(1_000);
   });
 });
+
+describe('malformed search envelope', () => {
+  /**
+   * Regression: GetSongBPM answers a miss with `{"search": {"error": "no
+   * result"}}`, not an empty array. The typed cast asserted an array, `?? []`
+   * did not fire on a non-nullish object, and the following `.map` threw —
+   * which stopped the entire enrichment batch.
+   */
+  const respondWith = (body: unknown) =>
+    new GetSongBpmProvider({
+      baseUrl: 'https://example.invalid',
+      sleepImpl: async () => undefined,
+      fetchImpl: (async () =>
+        new Response(JSON.stringify(body), {
+          status: 200,
+          headers: { 'content-type': 'application/json' },
+        })) as unknown as typeof fetch,
+    });
+
+  it('treats a "no result" error object as no matches, not a failure', async () => {
+    const provider = respondWith({ search: { error: 'no result' } });
+    await expect(
+      provider.lookup(context(), { getSongBpmApiKey: 'k' }),
+    ).resolves.toEqual([]);
+  });
+
+  it('tolerates any other non-array shape', async () => {
+    for (const shape of [{ search: 'nonsense' }, { search: 0 }, { search: {} }, {}]) {
+      const provider = respondWith(shape);
+      await expect(
+        provider.lookup(context(), { getSongBpmApiKey: 'k' }),
+      ).resolves.toEqual([]);
+    }
+  });
+
+  it('still surfaces a genuine service error message', async () => {
+    const provider = respondWith({ search: { error: 'api key exceeded' } });
+    await expect(
+      provider.lookup(context(), { getSongBpmApiKey: 'k' }),
+    ).rejects.toThrow(/api key exceeded/i);
+  });
+});
