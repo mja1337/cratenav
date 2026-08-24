@@ -1,0 +1,405 @@
+{
+ "id": 22987,
+ "status": "Accepted",
+ "year": 1999,
+ "resource_url": "https://api.discogs.com/releases/22987",
+ "uri": "https://www.discogs.com/release/22987-The-Artful-Dodger-Re-Rewind-The-Crowd-Say-Bo-Selecta",
+ "artists": [
+  {
+   "name": "Artful Dodger",
+   "anv": "The Artful Dodger",
+   "join": "",
+   "role": "",
+   "tracks": "",
+   "id": 12617,
+   "resource_url": "https://api.discogs.com/artists/12617",
+   "thumbnail_url": "https://i.discogs.com/XcIeBlVkkh2yQP0-BU9SNjalLHUlByqCmot14KLTPLY/rs:fit/g:sm/q:90/h:376/w:298/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTEyNjE3/LTExMzA4OTAxMjIu/anBlZw.jpeg"
+  }
+ ],
+ "artists_sort": "Artful Dodger",
+ "labels": [
+  {
+   "name": "Relentless Records",
+   "catno": "RELENT 1T",
+   "entity_type": "1",
+   "entity_type_name": "Label",
+   "id": 4387,
+   "resource_url": "https://api.discogs.com/labels/4387",
+   "thumbnail_url": "https://i.discogs.com/zSCMsoIYArFplT-hHkaRPFD12MYZwsoNmab_X0NlKcQ/rs:fit/g:sm/q:90/h:100/w:211/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQzODct/MTU5OTY1MjIyNy01/OTI4LnBuZw.jpeg"
+  },
+  {
+   "name": "Public Demand",
+   "catno": "RELENT 1T",
+   "entity_type": "1",
+   "entity_type_name": "Label",
+   "id": 4161,
+   "resource_url": "https://api.discogs.com/labels/4161",
+   "thumbnail_url": "https://i.discogs.com/YTMSYsa9Mvkmm2oQimuyZxEyVxO2Akm0eFL6rQgFozs/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQxNjEt/MTUyNTI2MjAwOS02/MDI1LmpwZWc.jpeg"
+  }
+ ],
+ "series": [],
+ "companies": [
+  {
+   "name": "Relentless Records",
+   "catno": "",
+   "entity_type": "13",
+   "entity_type_name": "Phonographic Copyright (p)",
+   "id": 4387,
+   "resource_url": "https://api.discogs.com/labels/4387",
+   "thumbnail_url": "https://i.discogs.com/zSCMsoIYArFplT-hHkaRPFD12MYZwsoNmab_X0NlKcQ/rs:fit/g:sm/q:90/h:100/w:211/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQzODct/MTU5OTY1MjIyNy01/OTI4LnBuZw.jpeg"
+  },
+  {
+   "name": "Relentless Records",
+   "catno": "",
+   "entity_type": "14",
+   "entity_type_name": "Copyright (c)",
+   "id": 4387,
+   "resource_url": "https://api.discogs.com/labels/4387",
+   "thumbnail_url": "https://i.discogs.com/zSCMsoIYArFplT-hHkaRPFD12MYZwsoNmab_X0NlKcQ/rs:fit/g:sm/q:90/h:100/w:211/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQzODct/MTU5OTY1MjIyNy01/OTI4LnBuZw.jpeg"
+  },
+  {
+   "name": "Warner/Chappell",
+   "catno": "",
+   "entity_type": "21",
+   "entity_type_name": "Published By",
+   "id": 138147,
+   "resource_url": "https://api.discogs.com/labels/138147",
+   "thumbnail_url": "https://i.discogs.com/XVZUzsBX2ir-z0LcRCtXF7_JnmzOQ_L6Rte6KNMK3J4/rs:fit/g:sm/q:90/h:600/w:571/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEzODE0/Ny0xNDMzMDg5NzA3/LTU3NjguanBlZw.jpeg"
+  },
+  {
+   "name": "Windswept Pacific",
+   "catno": "",
+   "entity_type": "21",
+   "entity_type_name": "Published By",
+   "id": 276492,
+   "resource_url": "https://api.discogs.com/labels/276492",
+   "thumbnail_url": "https://i.discogs.com/8u72_YeEwheEfY3sqBaZCBn8HiDwrqzv2g9jyNV7vPw/rs:fit/g:sm/q:90/h:405/w:573/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTI3NjQ5/Mi0xNjQxNzUxNTc2/LTQwNDMuanBlZw.jpeg"
+  },
+  {
+   "name": "Public Demand",
+   "catno": "",
+   "entity_type": "6",
+   "entity_type_name": "Licensed From",
+   "id": 4161,
+   "resource_url": "https://api.discogs.com/labels/4161",
+   "thumbnail_url": "https://i.discogs.com/YTMSYsa9Mvkmm2oQimuyZxEyVxO2Akm0eFL6rQgFozs/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQxNjEt/MTUyNTI2MjAwOS02/MDI1LmpwZWc.jpeg"
+  }
+ ],
+ "formats": [
+  {
+   "name": "Vinyl",
+   "qty": "1",
+   "descriptions": [
+    "12\""
+   ]
+  }
+ ],
+ "data_quality": "Correct",
+ "community": {
+  "have": 2124,
+  "want": 431,
+  "rating": {
+   "count": 145,
+   "average": 4.02
+  },
+  "submitter": {
+   "username": "PureAzura",
+   "resource_url": "https://api.discogs.com/users/PureAzura"
+  },
+  "contributors": [
+   {
+    "username": "PureAzura",
+    "resource_url": "https://api.discogs.com/users/PureAzura"
+   },
+   {
+    "username": "sklbns27",
+    "resource_url": "https://api.discogs.com/users/sklbns27"
+   },
+   {
+    "username": "darksidepressure",
+    "resource_url": "https://api.discogs.com/users/darksidepressure"
+   },
+   {
+    "username": "sjcee",
+    "resource_url": "https://api.discogs.com/users/sjcee"
+   },
+   {
+    "username": "gaz3434",
+    "resource_url": "https://api.discogs.com/users/gaz3434"
+   },
+   {
+    "username": "double-happiness",
+    "resource_url": "https://api.discogs.com/users/double-happiness"
+   },
+   {
+    "username": "DiscogsUpdateBot",
+    "resource_url": "https://api.discogs.com/users/DiscogsUpdateBot"
+   },
+   {
+    "username": "jweijde",
+    "resource_url": "https://api.discogs.com/users/jweijde"
+   },
+   {
+    "username": "Weasle",
+    "resource_url": "https://api.discogs.com/users/Weasle"
+   }
+  ],
+  "data_quality": "Correct",
+  "status": "Accepted"
+ },
+ "format_quantity": 1,
+ "date_added": "2002-02-01T06:15:24-08:00",
+ "date_changed": "2017-04-05T05:55:57-07:00",
+ "num_for_sale": 62,
+ "lowest_price": 1.86,
+ "master_id": 77731,
+ "master_url": "https://api.discogs.com/masters/77731",
+ "title": "Re-Rewind The Crowd Say Bo Selecta",
+ "country": "UK",
+ "released": "1999",
+ "notes": "Full original mix can be found on Relentless promo and Public Demand test press.\r\n",
+ "released_formatted": "1999",
+ "identifiers": [
+  {
+   "type": "Barcode",
+   "value": "5 026535 030164"
+  },
+  {
+   "type": "Matrix / Runout",
+   "value": "RELENT-1T-A-1",
+   "description": "Side A"
+  },
+  {
+   "type": "Matrix / Runout",
+   "value": "RELENT-1T/B- B-1 PO5-2 EW",
+   "description": "Side B"
+  }
+ ],
+ "videos": [
+  {
+   "uri": "https://www.youtube.com/watch?v=cIoRZyS3s-s",
+   "title": "Artful Dodger - Re-Wind The Crowd Say Bo Selecta (Sharp Addiction To DTPM Dub)",
+   "description": "http://www.45worlds.com/12single/record/relent1t\n\nIF YOU ARE THE COPYRIGHT OWNER AND WANT ME TO REMOVE THE VIDEO, PLEASE CONTACT ME AND I WILL DELETE IT AS SOON AS I CAN.",
+   "duration": 419,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=XsZq9DYBWg0",
+   "title": "Artful Dodger - Re-Wind The Crowd Say Bo Selecta (Bump 'N' Flex Sweet 'N' Low Mix)",
+   "description": "http://www.45worlds.com/12single/record/relent1t\n\nIF YOU ARE THE COPYRIGHT OWNER AND WANT ME TO REMOVE THE VIDEO, PLEASE CONTACT ME AND I WILL DELETE IT AS SOON AS I CAN.",
+   "duration": 385,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=cIoRZyS3s-s",
+   "title": "Artful Dodger - Re-Wind The Crowd Say Bo Selecta (Sharp Addiction To DTPM Dub)",
+   "description": "http://www.45worlds.com/12single/record/relent1t\n\nIF YOU ARE THE COPYRIGHT OWNER AND WANT ME TO REMOVE THE VIDEO, PLEASE CONTACT ME AND I WILL DELETE IT AS SOON AS I CAN.",
+   "duration": 419,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=XsZq9DYBWg0",
+   "title": "Artful Dodger - Re-Wind The Crowd Say Bo Selecta (Bump 'N' Flex Sweet 'N' Low Mix)",
+   "description": "http://www.45worlds.com/12single/record/relent1t\n\nIF YOU ARE THE COPYRIGHT OWNER AND WANT ME TO REMOVE THE VIDEO, PLEASE CONTACT ME AND I WILL DELETE IT AS SOON AS I CAN.",
+   "duration": 385,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=cUYgNEwD3gQ",
+   "title": "Craig David ft Artful Dodger - Re-Rewind",
+   "description": "Craig David ft Artful Dodger - Re-Rewind",
+   "duration": 333,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=ibpEeYe7o5U",
+   "title": "Artful Armand - Rewind Doesnt Know Me",
+   "description": "Mash up \n\r\n\r-Video Upload powered by https://www.TunesToTube.com",
+   "duration": 231,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=mjqRWddgdh0",
+   "title": "Re-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Bump'n'flex (Sweet 'N' Low Mix))",
+   "description": "Provided to YouTube by Crimson\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Bump'n'flex (Sweet 'N' Low Mix)) · Artful Dodger · Craig David\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David)\n\n℗ 1999 - Public Demand\n\nReleased on: 2024-0",
+   "duration": 391,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=Pf7EEl78AUg",
+   "title": "Re-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Sharp Club Vocal Remix)",
+   "description": "Provided to YouTube by Crimson\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Sharp Club Vocal Remix) · Artful Dodger · Craig David\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David)\n\n℗ 1999 - Public Demand\n\nReleased on: 2024-05-17\n\narr",
+   "duration": 418,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=qqGxxtcrYqE",
+   "title": "Artful Dodger - Rewind (Wideboys The Crowd Say Bo Selecta Remix)",
+   "description": " ",
+   "duration": 167,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=vEtWdI9FByA",
+   "title": "Artful Dodger Feat Craig David - Re-Rewind (The Crowd Say Bo Selecta)",
+   "description": "Massive tune by Artful Dodger performed by Craig David in 1999.\n\nMore info about this song at:\nhttp://www.discogs.com/Artful-Dodger-Re-Rewind-The-Crowd-Say-Bo-Selecta/master/77731",
+   "duration": 238,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=8r7hxBXIwE0",
+   "title": "The Artful Dodger - Re-Rewind (The Crowd Say Bo Selecta) [Riis Groove Edit]",
+   "description": "FREE DOWNLOAD : http://hypeddit.com/track/yt/30raml\n  The Artful Dodger - Re-Rewind (The Crowd Say Bo Selecta) [Riis Groove Edit]\nFree download: soundcloud.com/pure_clubbing_enjoyment/the-artful-dodger-re-rewind",
+   "duration": 477,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=ztqpMHRfO6U",
+   "title": "The Artful Dodger - Re Rewind The Crowd Say Bo Selecta (Sweet N' Lo Mix)",
+   "description": "Maxi / 2000",
+   "duration": 386,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=76U3NzuhGYQ",
+   "title": "Re-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Radio Edit)",
+   "description": "Provided to YouTube by Crimson\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David) (Radio Edit) · Artful Dodger · Craig David\n\nRe-Rewind (The Crowd Say Bo Selecta) (feat. Craig David)\n\n℗ 1999 - Public Demand\n\nReleased on: 2024-05-17\n\nComposer: Craig",
+   "duration": 241,
+   "embed": true
+  }
+ ],
+ "genres": [
+  "Electronic"
+ ],
+ "styles": [
+  "UK Garage"
+ ],
+ "tracklist": [
+  {
+   "position": "A1",
+   "type_": "track",
+   "title": "Re-Rewind The Crowd Say Bo Selecta (Radio Edit)",
+   "duration": ""
+  },
+  {
+   "position": "A2",
+   "type_": "track",
+   "title": "Re-Rewind The Crowd Say Bo Selecta (Bump 'N' Flex (Sweet 'N' Low Mix))",
+   "extraartists": [
+    {
+     "name": "Bump & Flex",
+     "anv": "Bump 'N' Flex",
+     "join": "",
+     "role": "Remix",
+     "tracks": "",
+     "id": 15853,
+     "resource_url": "https://api.discogs.com/artists/15853"
+    },
+    {
+     "name": "Grant Nelson",
+     "anv": "",
+     "join": "",
+     "role": "Remix, Producer [Additional Production]",
+     "tracks": "",
+     "id": 3561,
+     "resource_url": "https://api.discogs.com/artists/3561"
+    }
+   ],
+   "duration": ""
+  },
+  {
+   "position": "B",
+   "type_": "track",
+   "title": "Re-Rewind The Crowd Say Bo Selecta (Sharp Addiction To DTPM Dub)",
+   "extraartists": [
+    {
+     "name": "Kevin White",
+     "anv": "",
+     "join": "",
+     "role": "Engineer",
+     "tracks": "",
+     "id": 49033,
+     "resource_url": "https://api.discogs.com/artists/49033"
+    },
+    {
+     "name": "The Sharp Boys",
+     "anv": "",
+     "join": "",
+     "role": "Remix, Producer [Additional Production]",
+     "tracks": "",
+     "id": 7527,
+     "resource_url": "https://api.discogs.com/artists/7527"
+    }
+   ],
+   "duration": ""
+  }
+ ],
+ "extraartists": [
+  {
+   "name": "Kevin White",
+   "anv": "",
+   "join": "",
+   "role": "Engineer [Mix Engineer]",
+   "tracks": "",
+   "id": 49033,
+   "resource_url": "https://api.discogs.com/artists/49033"
+  },
+  {
+   "name": "Mark Hill",
+   "anv": "",
+   "join": "",
+   "role": "Producer, Arranged By, Written-By",
+   "tracks": "",
+   "id": 126426,
+   "resource_url": "https://api.discogs.com/artists/126426"
+  },
+  {
+   "name": "Pete Devereux",
+   "anv": "Peter Devereux",
+   "join": "",
+   "role": "Producer, Arranged By, Written-By",
+   "tracks": "",
+   "id": 228326,
+   "resource_url": "https://api.discogs.com/artists/228326"
+  },
+  {
+   "name": "Craig David",
+   "anv": "",
+   "join": "",
+   "role": "Vocals [Featuring], Written-By",
+   "tracks": "",
+   "id": 12626,
+   "resource_url": "https://api.discogs.com/artists/12626"
+  }
+ ],
+ "images": [
+  {
+   "type": "primary",
+   "uri": "https://i.discogs.com/jVYUWEuk1P90U8f2jKtK0-oXYll24C16OJCuJaJqXOw/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTEyNjA3OTc4MDcu/anBlZw.jpeg",
+   "resource_url": "https://i.discogs.com/jVYUWEuk1P90U8f2jKtK0-oXYll24C16OJCuJaJqXOw/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTEyNjA3OTc4MDcu/anBlZw.jpeg",
+   "uri150": "https://i.discogs.com/qwspyvUJwJuTboiosupKvfmzDW22thICpYjtcwxowzs/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTEyNjA3OTc4MDcu/anBlZw.jpeg",
+   "width": 600,
+   "height": 600
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/qlgZ4Mwuo76fMIPHgltRPv22oD9jmW_DiMbwLMTJ4NQ/rs:fit/g:sm/q:90/h:599/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MTUu/anBlZw.jpeg",
+   "resource_url": "https://i.discogs.com/qlgZ4Mwuo76fMIPHgltRPv22oD9jmW_DiMbwLMTJ4NQ/rs:fit/g:sm/q:90/h:599/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MTUu/anBlZw.jpeg",
+   "uri150": "https://i.discogs.com/e7P2IKZAA1UDTcqwLAT0WX_p6yQhxq_8XUGZW6fxUhM/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MTUu/anBlZw.jpeg",
+   "width": 600,
+   "height": 599
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/U75N-Uehb3TVkRAWXyfnn_3bKuAntvrGFyztw_wLQWU/rs:fit/g:sm/q:90/h:599/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MzAu/anBlZw.jpeg",
+   "resource_url": "https://i.discogs.com/U75N-Uehb3TVkRAWXyfnn_3bKuAntvrGFyztw_wLQWU/rs:fit/g:sm/q:90/h:599/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MzAu/anBlZw.jpeg",
+   "uri150": "https://i.discogs.com/4Il1ZjZFLm-ninQAO0LqEYC8bwVeWxBdYWIk7t-ciPg/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTExNjE0NTc2MzAu/anBlZw.jpeg",
+   "width": 600,
+   "height": 599
+  }
+ ],
+ "thumb": "https://i.discogs.com/qwspyvUJwJuTboiosupKvfmzDW22thICpYjtcwxowzs/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyOTg3/LTEyNjA3OTc4MDcu/anBlZw.jpeg",
+ "estimated_weight": 230,
+ "blocked_from_sale": false,
+ "is_offensive": false
+}

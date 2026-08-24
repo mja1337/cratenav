@@ -1,0 +1,748 @@
+{
+ "pagination": {
+  "page": 1,
+  "pages": 6,
+  "per_page": 100,
+  "items": 549,
+  "urls": {
+   "last": "https://api.discogs.com/users/MarkJAnderson/collection/folders/0/releases?page=6&per_page=100&sort=added&sort_order=desc",
+   "next": "https://api.discogs.com/users/MarkJAnderson/collection/folders/0/releases?page=2&per_page=100&sort=added&sort_order=desc"
+  }
+ },
+ "releases": [
+  {
+   "id": 22718,
+   "instance_id": 2174432100,
+   "date_added": "2026-08-16T07:09:13-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 22718,
+    "master_id": 651548,
+    "master_url": "https://api.discogs.com/masters/651548",
+    "resource_url": "https://api.discogs.com/releases/22718",
+    "thumb": "https://i.discogs.com/u7Lx3r5TD3-fHrvBkm425Kh5LVvtTx_y-96S9EgRJdE/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyNzE4/LTExNjc4MTk3MDYu/anBlZw.jpeg",
+    "cover_image": "https://i.discogs.com/jeVXcPu2xE9Cw7kxPmuXphh3u0YtuLE5CaCNMCy6FtA/rs:fit/g:sm/q:90/h:592/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTIyNzE4/LTExNjc4MTk3MDYu/anBlZw.jpeg",
+    "title": "Try Me Out",
+    "year": 1999,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Filter",
+      "catno": "FILT037",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1076,
+      "resource_url": "https://api.discogs.com/labels/1076"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Sunship",
+      "anv": "",
+      "join": "Featuring",
+      "role": "",
+      "tracks": "",
+      "id": 14449,
+      "resource_url": "https://api.discogs.com/artists/14449"
+     },
+     {
+      "name": "Anita Kelsey",
+      "anv": "",
+      "join": "And",
+      "role": "",
+      "tracks": "",
+      "id": 37722,
+      "resource_url": "https://api.discogs.com/artists/37722"
+     },
+     {
+      "name": "MC RB",
+      "anv": "R.B.",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 37431,
+      "resource_url": "https://api.discogs.com/artists/37431"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "UK Garage"
+    ]
+   }
+  },
+  {
+   "id": 1525345,
+   "instance_id": 2174430035,
+   "date_added": "2026-08-16T07:03:56-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1525345,
+    "master_id": 1146614,
+    "master_url": "https://api.discogs.com/masters/1146614",
+    "resource_url": "https://api.discogs.com/releases/1525345",
+    "thumb": "https://i.discogs.com/81llDAlYUfpf0mnDvFhFHbNVMAyT8LHlaWaqWP717KA/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1MjUz/NDUtMTIyNjA3NDk2/My5qcGVn.jpeg",
+    "cover_image": "https://i.discogs.com/n0YnZkX5Nd14npne4x2GoKtLFymFIue54yzATGEmEvA/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1MjUz/NDUtMTIyNjA3NDk2/My5qcGVn.jpeg",
+    "title": "Zion Road / No No No",
+    "year": 2008,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "Unofficial Release",
+       "45 RPM"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Not On Label",
+      "catno": "DUBBYSTYLE002",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1818,
+      "resource_url": "https://api.discogs.com/labels/1818"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Unknown Artist",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 355,
+      "resource_url": "https://api.discogs.com/artists/355"
+     }
+    ],
+    "genres": [
+     "Electronic",
+     "Reggae"
+    ],
+    "styles": [
+     "Reggae",
+     "Dubstep"
+    ]
+   }
+  },
+  {
+   "id": 1497643,
+   "instance_id": 2174427236,
+   "date_added": "2026-08-16T06:57:09-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1497643,
+    "master_id": 15613,
+    "master_url": "https://api.discogs.com/masters/15613",
+    "resource_url": "https://api.discogs.com/releases/1497643",
+    "thumb": "https://i.discogs.com/glo1V47x6tkOl7hJy8HOS78vTHmsRzZ05c9cDDe2-uM/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE0OTc2/NDMtMTIzOTQwMjgy/OC5qcGVn.jpeg",
+    "cover_image": "https://i.discogs.com/skB-RvR286VC4gYlHnJ4vDDukyfWi2E5MiYCmBpfBz8/rs:fit/g:sm/q:90/h:287/w:284/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE0OTc2/NDMtMTIzOTQwMjgy/OC5qcGVn.jpeg",
+    "title": "3KLane / Modem",
+    "year": 2008,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "Promo"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "H.E.N.C.H Recordings",
+      "catno": "HENCH 004",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 100987,
+      "resource_url": "https://api.discogs.com/labels/100987"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Jakes",
+      "anv": "",
+      "join": "&",
+      "role": "",
+      "tracks": "",
+      "id": 208130,
+      "resource_url": "https://api.discogs.com/artists/208130"
+     },
+     {
+      "name": "Joker (5)",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 622822,
+      "resource_url": "https://api.discogs.com/artists/622822"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Dubstep"
+    ]
+   }
+  },
+  {
+   "id": 180389,
+   "instance_id": 2169305161,
+   "date_added": "2026-07-31T14:55:40-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 180389,
+    "master_id": 131884,
+    "master_url": "https://api.discogs.com/masters/131884",
+    "resource_url": "https://api.discogs.com/releases/180389",
+    "thumb": "https://i.discogs.com/hislkid9gWMfYgslG6P0HwX9FFpKAs8sN-RSUXhS3yc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4MDM4/OS0xMTE5ODM0MzMw/LmpwZw.jpeg",
+    "cover_image": "https://i.discogs.com/w5GBWLQ_zNix_4PLXdthCj0u1iX76ElC9N6W0pWWebQ/rs:fit/g:sm/q:90/h:441/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4MDM4/OS0xMTE5ODM0MzMw/LmpwZw.jpeg",
+    "title": "I Refuse (What You Want)",
+    "year": 1997,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "2",
+      "descriptions": [
+       "12\"",
+       "33 ⅓ RPM",
+       "Promo"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "XL Recordings",
+      "catno": "XLT 93 DJ",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 160,
+      "resource_url": "https://api.discogs.com/labels/160"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Somore",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 10310,
+      "resource_url": "https://api.discogs.com/artists/10310"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "UK Garage",
+     "Speed Garage"
+    ]
+   }
+  },
+  {
+   "id": 1377299,
+   "instance_id": 2156868776,
+   "date_added": "2026-06-20T09:28:26-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1377299,
+    "master_id": 24024,
+    "master_url": "https://api.discogs.com/masters/24024",
+    "resource_url": "https://api.discogs.com/releases/1377299",
+    "thumb": "https://i.discogs.com/C5hHhNHFst_aZvepNZVSNkOFy5GxPBVR9bvEkD3qoVY/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTEzNzcy/OTktMTIxNDMwOTA5/My5qcGVn.jpeg",
+    "cover_image": "https://i.discogs.com/dyg-fA0v3v0WGo-sWcSVs02xnEgdKX3YH_1X6GdZKZ4/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTEzNzcy/OTktMTIxNDMwOTA5/My5qcGVn.jpeg",
+    "title": "What's It Gonna Be",
+    "year": 2007,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "text": "Stickered",
+      "descriptions": [
+       "12\"",
+       "33 ⅓ RPM",
+       "Promo",
+       "White Label"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Ministry Of Sound",
+      "catno": "GONNABE01P2",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1169,
+      "resource_url": "https://api.discogs.com/labels/1169"
+     }
+    ],
+    "artists": [
+     {
+      "name": "H Two O",
+      "anv": "H 'Two' O",
+      "join": "Ft",
+      "role": "",
+      "tracks": "",
+      "id": 1038087,
+      "resource_url": "https://api.discogs.com/artists/1038087"
+     },
+     {
+      "name": "Platnum (3)",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 509041,
+      "resource_url": "https://api.discogs.com/artists/509041"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "House",
+     "UK Garage",
+     "Electro",
+     "Bassline"
+    ]
+   }
+  },
+  {
+   "id": 9949607,
+   "instance_id": 2156868775,
+   "date_added": "2026-06-20T09:28:26-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 9949607,
+    "master_id": 146511,
+    "master_url": "https://api.discogs.com/masters/146511",
+    "resource_url": "https://api.discogs.com/releases/9949607",
+    "thumb": "https://i.discogs.com/fWl1_kf-6514qEZpgbZhK-E52wfoCVGopaDe5W2qRrc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5NDk2/MDctMTQ4OTE3OTUz/OC0zMDkyLmpwZWc.jpeg",
+    "cover_image": "https://i.discogs.com/m-NjJAEQouoPzM7ltD8KGoQ3APbc6EyurtRUExCNxnY/rs:fit/g:sm/q:90/h:600/w:565/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5NDk2/MDctMTQ4OTE3OTUz/OC0zMDkyLmpwZWc.jpeg",
+    "title": "Deeper",
+    "year": 1997,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "33 ⅓ RPM",
+       "Promo"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Fresh",
+      "catno": "FRSHT 68",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1153,
+      "resource_url": "https://api.discogs.com/labels/1153"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Serious Danger",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 8813,
+      "resource_url": "https://api.discogs.com/artists/8813"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "House",
+     "UK Garage",
+     "Speed Garage"
+    ]
+   }
+  },
+  {
+   "id": 1832784,
+   "instance_id": 2126458264,
+   "date_added": "2026-03-21T08:54:04-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1832784,
+    "master_id": 0,
+    "master_url": null,
+    "resource_url": "https://api.discogs.com/releases/1832784",
+    "thumb": "https://i.discogs.com/5rbpJYxilNrs2uF6uVHZpXJIX44CyHO-Z31iyMeKUSM/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4MzI3/ODQtMTYwMzA4NTA2/Ni02NDQxLmpwZWc.jpeg",
+    "cover_image": "https://i.discogs.com/uTM4Rf1TQl6b8P6GbS0xrIm8ZriNiR9H_Q5WifwCBzY/rs:fit/g:sm/q:90/h:400/w:400/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4MzI3/ODQtMTYwMzA4NTA2/Ni02NDQxLmpwZWc.jpeg",
+    "title": "Sinners / Goblin",
+    "year": 2009,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Ringo Records",
+      "catno": "RNG 008",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 73644,
+      "resource_url": "https://api.discogs.com/labels/73644"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Johnny Clarke",
+      "anv": "Johnny Clark",
+      "join": "vs",
+      "role": "",
+      "tracks": "",
+      "id": 88496,
+      "resource_url": "https://api.discogs.com/artists/88496"
+     },
+     {
+      "name": "Mala (4)",
+      "anv": "",
+      "join": "/",
+      "role": "",
+      "tracks": "",
+      "id": 570739,
+      "resource_url": "https://api.discogs.com/artists/570739"
+     },
+     {
+      "name": "Coki",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 123377,
+      "resource_url": "https://api.discogs.com/artists/123377"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Dubstep"
+    ]
+   }
+  },
+  {
+   "id": 1527333,
+   "instance_id": 2126387025,
+   "date_added": "2026-03-21T05:24:22-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1527333,
+    "master_id": 15310,
+    "master_url": "https://api.discogs.com/masters/15310",
+    "resource_url": "https://api.discogs.com/releases/1527333",
+    "thumb": "https://i.discogs.com/Qfq4xGx4q5FBBzJWaNjDkabU5mAznWS00DjGL1fe7gc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1Mjcz/MzMtMTMzODM1OTE4/MC03ODIxLnBuZw.jpeg",
+    "cover_image": "https://i.discogs.com/Mbd_iuttcF3ESLSsypvjqBktHUaA67t7GM5_dL-7SrU/rs:fit/g:sm/q:90/h:446/w:450/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1Mjcz/MzMtMTMzODM1OTE4/MC03ODIxLnBuZw.jpeg",
+    "title": "Get Up / Hovercraft",
+    "year": 2008,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Ringo Records",
+      "catno": "RNG007",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 73644,
+      "resource_url": "https://api.discogs.com/labels/73644"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Kromestar",
+      "anv": "",
+      "join": "/",
+      "role": "",
+      "tracks": "",
+      "id": 570738,
+      "resource_url": "https://api.discogs.com/artists/570738"
+     },
+     {
+      "name": "Cluekid",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 869435,
+      "resource_url": "https://api.discogs.com/artists/869435"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Dubstep"
+    ]
+   }
+  },
+  {
+   "id": 1838100,
+   "instance_id": 2126387021,
+   "date_added": "2026-03-21T05:24:21-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 1838100,
+    "master_id": 157682,
+    "master_url": "https://api.discogs.com/masters/157682",
+    "resource_url": "https://api.discogs.com/releases/1838100",
+    "thumb": "https://i.discogs.com/S5QA6rTkx2JCTx9aB46SP60gKGctivbk_jvkG_aV48c/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4Mzgx/MDAtMTU1NjQxOTk2/Ny02NzI2LmpwZWc.jpeg",
+    "cover_image": "https://i.discogs.com/knKnK1oRf72LT1q4kT-4KZUm9jOoLcOi93PT2jdAEZU/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE4Mzgx/MDAtMTU1NjQxOTk2/Ny02NzI2LmpwZWc.jpeg",
+    "title": "Sick Music Sampler 2",
+    "year": 2009,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM",
+       "Sampler"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Hospital Records",
+      "catno": "NHS155",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1386,
+      "resource_url": "https://api.discogs.com/labels/1386"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Danny Byrd",
+      "anv": "",
+      "join": "/",
+      "role": "",
+      "tracks": "",
+      "id": 6152,
+      "resource_url": "https://api.discogs.com/artists/6152"
+     },
+     {
+      "name": "DJ Friction",
+      "anv": "Friction",
+      "join": "&",
+      "role": "",
+      "tracks": "",
+      "id": 4124,
+      "resource_url": "https://api.discogs.com/artists/4124"
+     },
+     {
+      "name": "K.Tee",
+      "anv": "K-Tee",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 9388,
+      "resource_url": "https://api.discogs.com/artists/9388"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Drum n Bass"
+    ]
+   }
+  },
+  {
+   "id": 962772,
+   "instance_id": 2120253220,
+   "date_added": "2026-03-03T02:20:16-08:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 962772,
+    "master_id": 1481000,
+    "master_url": "https://api.discogs.com/masters/1481000",
+    "resource_url": "https://api.discogs.com/releases/962772",
+    "thumb": "https://i.discogs.com/VOiTZ_XgsSQO2wmld9FxhfoK1kcXqNMuwendtjqMFBc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+    "cover_image": "https://i.discogs.com/qMVKGPaBMWJW8-SkyyAgS0erFRrFovdj1ChcM2Vp-BA/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+    "title": "Acton Dread / Cockney Flute (Rmx)",
+    "year": 2007,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\""
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Dub Police",
+      "catno": "DP009",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 53425,
+      "resource_url": "https://api.discogs.com/labels/53425"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Rusko",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 603542,
+      "resource_url": "https://api.discogs.com/artists/603542"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Dubstep"
+    ]
+   }
+  },
+  {
+   "id": 15831401,
+   "instance_id": 2118243445,
+   "date_added": "2026-02-25T11:16:43-08:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 15831401,
+    "master_id": 0,
+    "master_url": null,
+    "resource_url": "https://api.discogs.com/releases/15831401",
+    "thumb": "https://i.discogs.com/kcCQ8aG5jnA8_ckPsCL3yEpwDZTPkuGlNAV-Wh1HPks/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1ODMx/NDAxLTE1OTg2MDg5/NzMtNTM5MS5qcGVn.jpeg",
+    "cover_image": "https://i.discogs.com/On3PmEqmbtRslpTFHHXn7tjR44_wOlBhEnYxQ-oA_hs/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTE1ODMx/NDAxLTE1OTg2MDg5/NzMtNTM5MS5qcGVn.jpeg",
+    "title": "Keygen / Anatolian Heartland ",
+    "year": 2020,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM",
+       "EP"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Wych",
+      "catno": "WYCH004",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1119686,
+      "resource_url": "https://api.discogs.com/labels/1119686"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Sir Hiss",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 5943344,
+      "resource_url": "https://api.discogs.com/artists/5943344"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "Dubstep",
+     "Grime"
+    ]
+   }
+  },
+  {
+   "id": 126701,
+   "instance_id": 2046227130,
+   "date_added": "2025-07-30T12:38:54-07:00",
+   "rating": 0,
+   "basic_information": {
+    "id": 126701,
+    "master_id": 173591,
+    "master_url": "https://api.discogs.com/masters/173591",
+    "resource_url": "https://api.discogs.com/releases/126701",
+    "thumb": "https://i.discogs.com/0C9TAt7KkyYQu65CGZr4KmO20pQPTv7YHfb2dPI-VtI/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTEyNjcw/MS0xNzIxODE0NDY0/LTkwNTAucG5n.jpeg",
+    "cover_image": "https://i.discogs.com/ZxcqJ3DDi39ffTYsNhiJa213B3V8TVXeJKWsp-amv4I/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTEyNjcw/MS0xNzIxODE0NDY0/LTkwNTAucG5n.jpeg",
+    "title": "Hobson's Choice",
+    "year": 1998,
+    "formats": [
+     {
+      "name": "Vinyl",
+      "qty": "1",
+      "descriptions": [
+       "12\"",
+       "45 RPM",
+       "White Label"
+      ]
+     }
+    ],
+    "labels": [
+     {
+      "name": "Not On Label (Active Minds Self-released)",
+      "catno": "HC 001",
+      "entity_type": "1",
+      "entity_type_name": "Label",
+      "id": 1033654,
+      "resource_url": "https://api.discogs.com/labels/1033654"
+     }
+    ],
+    "artists": [
+     {
+      "name": "Active Minds",
+      "anv": "",
+      "join": "",
+      "role": "",
+      "tracks": "",
+      "id": 96466,
+      "resource_url": "https://api.discogs.com/artists/96466"
+     }
+    ],
+    "genres": [
+     "Electronic"
+    ],
+    "styles": [
+     "UK Garage"
+    ]
+   }
+  }
+ ]
+}

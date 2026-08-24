@@ -1,0 +1,204 @@
+{
+ "id": 962772,
+ "status": "Accepted",
+ "year": 2007,
+ "resource_url": "https://api.discogs.com/releases/962772",
+ "uri": "https://www.discogs.com/release/962772-Rusko-Acton-Dread-Cockney-Flute-Rmx",
+ "artists": [
+  {
+   "name": "Rusko",
+   "anv": "",
+   "join": "",
+   "role": "",
+   "tracks": "",
+   "id": 603542,
+   "resource_url": "https://api.discogs.com/artists/603542",
+   "thumbnail_url": "https://i.discogs.com/7TM7mF8DUdnBPpVfeq3CcA0X0RsEczK4TtBg400B4qs/rs:fit/g:sm/q:90/h:291/w:290/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTYwMzU0/Mi0xMzk0MTk5Njkx/LTcxNDYuanBlZw.jpeg"
+  }
+ ],
+ "artists_sort": "Rusko",
+ "labels": [
+  {
+   "name": "Dub Police",
+   "catno": "DP009",
+   "entity_type": "1",
+   "entity_type_name": "Label",
+   "id": 53425,
+   "resource_url": "https://api.discogs.com/labels/53425",
+   "thumbnail_url": "https://i.discogs.com/yJkW_f8sZP7bj0EjWLjmlQQli17aYb--caAXUgZd9PY/rs:fit/g:sm/q:90/h:363/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTUzNDI1/LTEyNjY3MjEyMDEu/anBlZw.jpeg"
+  }
+ ],
+ "series": [],
+ "companies": [],
+ "formats": [
+  {
+   "name": "Vinyl",
+   "qty": "1",
+   "descriptions": [
+    "12\""
+   ]
+  }
+ ],
+ "data_quality": "Correct",
+ "community": {
+  "have": 586,
+  "want": 383,
+  "rating": {
+   "count": 82,
+   "average": 4.5
+  },
+  "submitter": {
+   "username": "Furiouz",
+   "resource_url": "https://api.discogs.com/users/Furiouz"
+  },
+  "contributors": [
+   {
+    "username": "Furiouz",
+    "resource_url": "https://api.discogs.com/users/Furiouz"
+   },
+   {
+    "username": "cygn",
+    "resource_url": "https://api.discogs.com/users/cygn"
+   },
+   {
+    "username": "Spankwa",
+    "resource_url": "https://api.discogs.com/users/Spankwa"
+   },
+   {
+    "username": "stalkism",
+    "resource_url": "https://api.discogs.com/users/stalkism"
+   },
+   {
+    "username": "stout",
+    "resource_url": "https://api.discogs.com/users/stout"
+   },
+   {
+    "username": "echo30",
+    "resource_url": "https://api.discogs.com/users/echo30"
+   },
+   {
+    "username": "The.Grey.Area.Radio",
+    "resource_url": "https://api.discogs.com/users/The.Grey.Area.Radio"
+   }
+  ],
+  "data_quality": "Correct",
+  "status": "Accepted"
+ },
+ "format_quantity": 1,
+ "date_added": "2007-06-22T23:58:28-07:00",
+ "date_changed": "2019-01-07T08:31:12-08:00",
+ "num_for_sale": 6,
+ "lowest_price": 26.27,
+ "master_id": 1481000,
+ "master_url": "https://api.discogs.com/masters/1481000",
+ "title": "Acton Dread / Cockney Flute (Rmx)",
+ "country": "UK",
+ "released": "2007-05-07",
+ "released_formatted": "07 May 2007",
+ "identifiers": [],
+ "videos": [
+  {
+   "uri": "https://www.youtube.com/watch?v=3my9-XwiOSU",
+   "title": "Cockney Flute - Rusko Remix",
+   "description": null,
+   "duration": 266,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=3igx-VLlT8M",
+   "title": "Rusko - Acton Dread",
+   "description": "Rusko - Action Dread, No Copyrights!\nAlbum: Action Dread\nArtist: Rusko\niTunes: http://itunes.apple.com/de/album/acton-dread-single/id300315397",
+   "duration": 270,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=3my9-XwiOSU",
+   "title": "Cockney Flute - Rusko Remix",
+   "description": null,
+   "duration": 266,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=3igx-VLlT8M",
+   "title": "Rusko - Acton Dread",
+   "description": "Rusko - Action Dread, No Copyrights!\nAlbum: Action Dread\nArtist: Rusko\niTunes: http://itunes.apple.com/de/album/acton-dread-single/id300315397",
+   "duration": 270,
+   "embed": true
+  }
+ ],
+ "genres": [
+  "Electronic"
+ ],
+ "styles": [
+  "Dubstep"
+ ],
+ "tracklist": [
+  {
+   "position": "A",
+   "type_": "track",
+   "artists": [
+    {
+     "name": "Rusko",
+     "anv": "",
+     "join": "",
+     "role": "",
+     "tracks": "",
+     "id": 603542,
+     "resource_url": "https://api.discogs.com/artists/603542"
+    }
+   ],
+   "title": "Acton Dread",
+   "duration": ""
+  },
+  {
+   "position": "AA",
+   "type_": "track",
+   "artists": [
+    {
+     "name": "Caspa (3)",
+     "anv": "",
+     "join": "",
+     "role": "",
+     "tracks": "",
+     "id": 504173,
+     "resource_url": "https://api.discogs.com/artists/504173"
+    }
+   ],
+   "title": "Cockney Flute (Rusko Rmx)",
+   "extraartists": [
+    {
+     "name": "Rusko",
+     "anv": "",
+     "join": "",
+     "role": "Remix",
+     "tracks": "",
+     "id": 603542,
+     "resource_url": "https://api.discogs.com/artists/603542"
+    }
+   ],
+   "duration": ""
+  }
+ ],
+ "images": [
+  {
+   "type": "primary",
+   "uri": "https://i.discogs.com/qMVKGPaBMWJW8-SkyyAgS0erFRrFovdj1ChcM2Vp-BA/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/qMVKGPaBMWJW8-SkyyAgS0erFRrFovdj1ChcM2Vp-BA/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/VOiTZ_XgsSQO2wmld9FxhfoK1kcXqNMuwendtjqMFBc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+   "width": 600,
+   "height": 600
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/q01z_9MUoMSXJd3P3XrxHXykLTurMw90dqZrMHmFUZc/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODc2/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/q01z_9MUoMSXJd3P3XrxHXykLTurMw90dqZrMHmFUZc/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODc2/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/3PxiLhyTsaTeqWoiWZjXNm0YUohM1Wplqwqw7aHc-TM/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODc2/LmpwZWc.jpeg",
+   "width": 600,
+   "height": 600
+  }
+ ],
+ "thumb": "https://i.discogs.com/VOiTZ_XgsSQO2wmld9FxhfoK1kcXqNMuwendtjqMFBc/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk2Mjc3/Mi0xMzI3MDcyODY4/LmpwZWc.jpeg",
+ "estimated_weight": 230,
+ "blocked_from_sale": false,
+ "is_offensive": false
+}

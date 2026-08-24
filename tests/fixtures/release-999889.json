@@ -1,0 +1,316 @@
+{
+ "id": 999889,
+ "status": "Accepted",
+ "year": 2007,
+ "resource_url": "https://api.discogs.com/releases/999889",
+ "uri": "https://www.discogs.com/release/999889-Commix-Be-True-Satellite-Type-2",
+ "artists": [
+  {
+   "name": "Commix",
+   "anv": "",
+   "join": "",
+   "role": "",
+   "tracks": "",
+   "id": 119661,
+   "resource_url": "https://api.discogs.com/artists/119661",
+   "thumbnail_url": "https://i.discogs.com/KYZNXF6eawq_sYsEieyJ5U8516BC7Ct0GtKL5DBgEaw/rs:fit/g:sm/q:90/h:480/w:480/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9BLTExOTY2/MS0xNDExNzYzNzE5/LTU2MTcuanBlZw.jpeg"
+  }
+ ],
+ "artists_sort": "Commix",
+ "labels": [
+  {
+   "name": "Metalheadz",
+   "catno": "METH075",
+   "entity_type": "1",
+   "entity_type_name": "Label",
+   "id": 128,
+   "resource_url": "https://api.discogs.com/labels/128",
+   "thumbnail_url": "https://i.discogs.com/-x8nrvNdNcHzcCxs_xiRHGdjn50BlRHF-4wt42tlFv8/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEyOC0x/MTM4NTYwMTE5Lmpw/ZWc.jpeg"
+  },
+  {
+   "name": "Metalheadz",
+   "catno": "METH75",
+   "entity_type": "1",
+   "entity_type_name": "Label",
+   "id": 128,
+   "resource_url": "https://api.discogs.com/labels/128",
+   "thumbnail_url": "https://i.discogs.com/-x8nrvNdNcHzcCxs_xiRHGdjn50BlRHF-4wt42tlFv8/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEyOC0x/MTM4NTYwMTE5Lmpw/ZWc.jpeg"
+  }
+ ],
+ "series": [],
+ "companies": [
+  {
+   "name": "Metalheadz",
+   "catno": "",
+   "entity_type": "13",
+   "entity_type_name": "Phonographic Copyright (p)",
+   "id": 128,
+   "resource_url": "https://api.discogs.com/labels/128",
+   "thumbnail_url": "https://i.discogs.com/-x8nrvNdNcHzcCxs_xiRHGdjn50BlRHF-4wt42tlFv8/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEyOC0x/MTM4NTYwMTE5Lmpw/ZWc.jpeg"
+  },
+  {
+   "name": "Metalheadz",
+   "catno": "",
+   "entity_type": "14",
+   "entity_type_name": "Copyright (c)",
+   "id": 128,
+   "resource_url": "https://api.discogs.com/labels/128",
+   "thumbnail_url": "https://i.discogs.com/-x8nrvNdNcHzcCxs_xiRHGdjn50BlRHF-4wt42tlFv8/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEyOC0x/MTM4NTYwMTE5Lmpw/ZWc.jpeg"
+  },
+  {
+   "name": "Copyright Control",
+   "catno": "",
+   "entity_type": "21",
+   "entity_type_name": "Published By",
+   "id": 48207,
+   "resource_url": "https://api.discogs.com/labels/48207",
+   "thumbnail_url": "https://i.discogs.com/YSCMEY8Esx1UlDlBP31zJU6tN7SVv6ACBIh6JeQZqIk/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTQ4MjA3/LTE3NDQ1NTcxNTQt/NzA3NC5qcGVn.jpeg"
+  },
+  {
+   "name": "Altmedium",
+   "catno": "",
+   "entity_type": "33",
+   "entity_type_name": "Designed At",
+   "id": 383126,
+   "resource_url": "https://api.discogs.com/labels/383126"
+  },
+  {
+   "name": "Optimal Media Production",
+   "catno": "B789803",
+   "entity_type": "17",
+   "entity_type_name": "Pressed By",
+   "id": 129094,
+   "resource_url": "https://api.discogs.com/labels/129094",
+   "thumbnail_url": "https://i.discogs.com/xdYheSyWn1vN66xv-AdF2A9JOojPaNsCzhsftoRG9Rg/rs:fit/g:sm/q:90/h:61/w:200/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9MLTEyOTA5/NC0xMzE1MzI3MzE2/LmdpZg.jpeg"
+  }
+ ],
+ "formats": [
+  {
+   "name": "Vinyl",
+   "qty": "1",
+   "descriptions": [
+    "12\"",
+    "45 RPM"
+   ]
+  }
+ ],
+ "data_quality": "Needs Vote",
+ "community": {
+  "have": 2870,
+  "want": 1792,
+  "rating": {
+   "count": 444,
+   "average": 4.73
+  },
+  "submitter": {
+   "username": "DJ_Strict",
+   "resource_url": "https://api.discogs.com/users/DJ_Strict"
+  },
+  "contributors": [
+   {
+    "username": "DJ_Strict",
+    "resource_url": "https://api.discogs.com/users/DJ_Strict"
+   },
+   {
+    "username": "steady_pace",
+    "resource_url": "https://api.discogs.com/users/steady_pace"
+   },
+   {
+    "username": "silkcut312",
+    "resource_url": "https://api.discogs.com/users/silkcut312"
+   },
+   {
+    "username": "dfkd",
+    "resource_url": "https://api.discogs.com/users/dfkd"
+   },
+   {
+    "username": "Denebsound",
+    "resource_url": "https://api.discogs.com/users/Denebsound"
+   },
+   {
+    "username": "RyanPayn",
+    "resource_url": "https://api.discogs.com/users/RyanPayn"
+   },
+   {
+    "username": "powderhorn",
+    "resource_url": "https://api.discogs.com/users/powderhorn"
+   },
+   {
+    "username": "oclockaudio",
+    "resource_url": "https://api.discogs.com/users/oclockaudio"
+   },
+   {
+    "username": "palkanol",
+    "resource_url": "https://api.discogs.com/users/palkanol"
+   },
+   {
+    "username": "DjMeltdown",
+    "resource_url": "https://api.discogs.com/users/DjMeltdown"
+   },
+   {
+    "username": "seriousbusiness77",
+    "resource_url": "https://api.discogs.com/users/seriousbusiness77"
+   },
+   {
+    "username": "rapponi",
+    "resource_url": "https://api.discogs.com/users/rapponi"
+   }
+  ],
+  "data_quality": "Needs Vote",
+  "status": "Accepted"
+ },
+ "format_quantity": 1,
+ "date_added": "2007-08-11T06:58:24-07:00",
+ "date_changed": "2026-05-10T12:43:18-07:00",
+ "num_for_sale": 17,
+ "lowest_price": 34.72,
+ "master_id": 119732,
+ "master_url": "https://api.discogs.com/masters/119732",
+ "title": "Be True / Satellite Type 2",
+ "country": "UK",
+ "released": "2007-07-23",
+ "notes": "'Taken From The Forthcoming Album Call To Mind' ([m103483])\nPublished by Copyright Control\n(p)&(c) Metalheadz 2007\nMade in England\n\nA: 174 BPM\nAA: 174 BPM\n\nOriginal pressing in 2007\nRepress in 2020",
+ "released_formatted": "23 Jul 2007",
+ "identifiers": [
+  {
+   "type": "Barcode",
+   "value": "6 66017 16396 3"
+  },
+  {
+   "type": "Matrix / Runout",
+   "value": "METH075 B789803-01 A1 Stu.",
+   "description": "Runout (Side A)"
+  },
+  {
+   "type": "Matrix / Runout",
+   "value": "METH075 B789803-01 B1",
+   "description": "Runout (Side B)"
+  }
+ ],
+ "videos": [
+  {
+   "uri": "https://www.youtube.com/watch?v=vZj14QukWsE",
+   "title": "Commix - Be True",
+   "description": "Commix - Be True\nCall To Mind\n©2007 Metalheadz",
+   "duration": 400,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=qxyWgnYgISE",
+   "title": "Commix - Satellite Type 2",
+   "description": " ",
+   "duration": 337,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=vZj14QukWsE",
+   "title": "Commix - Be True",
+   "description": "Commix - Be True\nCall To Mind\n©2007 Metalheadz",
+   "duration": 400,
+   "embed": true
+  },
+  {
+   "uri": "https://www.youtube.com/watch?v=qxyWgnYgISE",
+   "title": "Commix - Satellite Type 2",
+   "description": " ",
+   "duration": 337,
+   "embed": true
+  }
+ ],
+ "genres": [
+  "Electronic"
+ ],
+ "styles": [
+  "Drum n Bass"
+ ],
+ "tracklist": [
+  {
+   "position": "A",
+   "type_": "track",
+   "title": "Be True",
+   "duration": "6:41"
+  },
+  {
+   "position": "AA",
+   "type_": "track",
+   "title": "Satellite Type 2",
+   "duration": "5:35"
+  }
+ ],
+ "extraartists": [
+  {
+   "name": "Eveson",
+   "anv": "",
+   "join": "",
+   "role": "Design",
+   "tracks": "",
+   "id": 806508,
+   "resource_url": "https://api.discogs.com/artists/806508"
+  },
+  {
+   "name": "Stuart Hawkes",
+   "anv": "Stu.",
+   "join": "",
+   "role": "Mastered By",
+   "tracks": "",
+   "id": 300468,
+   "resource_url": "https://api.discogs.com/artists/300468"
+  },
+  {
+   "name": "George Levings",
+   "anv": "G. Levings",
+   "join": "",
+   "role": "Written-By, Producer",
+   "tracks": "",
+   "id": 528849,
+   "resource_url": "https://api.discogs.com/artists/528849"
+  },
+  {
+   "name": "Guy Brewer",
+   "anv": "G. Brewer",
+   "join": "",
+   "role": "Written-By, Producer",
+   "tracks": "",
+   "id": 528847,
+   "resource_url": "https://api.discogs.com/artists/528847"
+  }
+ ],
+ "images": [
+  {
+   "type": "primary",
+   "uri": "https://i.discogs.com/8KBlUjTKFlvlCHxxg5QxQWuTRXdYLOVt20VCL89z9Qo/rs:fit/g:sm/q:90/h:600/w:592/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDc0/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/8KBlUjTKFlvlCHxxg5QxQWuTRXdYLOVt20VCL89z9Qo/rs:fit/g:sm/q:90/h:600/w:592/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDc0/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/gwNM7_ZM_zWitHrhxwcEU1guUCFXnRhFy__cqREbVVs/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDc0/LmpwZWc.jpeg",
+   "width": 592,
+   "height": 600
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/vqQMp9fojMNqNkDmYcX0whE2mfrNjXABoMV6lhveWCs/rs:fit/g:sm/q:90/h:600/w:592/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDk4/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/vqQMp9fojMNqNkDmYcX0whE2mfrNjXABoMV6lhveWCs/rs:fit/g:sm/q:90/h:600/w:592/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDk4/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/deQBWkJzLds6styme6dI1YGdl6qDnu0KWPCgTOhCke4/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDk4/LmpwZWc.jpeg",
+   "width": 592,
+   "height": 600
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/XKm4FG4V2zDtMXP6ib3K3Nb6qb8kmqzd5-f-8OEXciQ/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzI0/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/XKm4FG4V2zDtMXP6ib3K3Nb6qb8kmqzd5-f-8OEXciQ/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzI0/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/VeCtWtmFnfhtU8HTXqMtCZTm6wEcUDZgbzUH_f75CdA/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzI0/LmpwZWc.jpeg",
+   "width": 600,
+   "height": 600
+  },
+  {
+   "type": "secondary",
+   "uri": "https://i.discogs.com/mJrsS_oPmXcWz4pPxgXozQKy1KiAt9ugPjVp5SsXZEY/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzMz/LmpwZWc.jpeg",
+   "resource_url": "https://i.discogs.com/mJrsS_oPmXcWz4pPxgXozQKy1KiAt9ugPjVp5SsXZEY/rs:fit/g:sm/q:90/h:600/w:600/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzMz/LmpwZWc.jpeg",
+   "uri150": "https://i.discogs.com/oj5gNe2MpwcRTG3W08wHDUN0wa5VKkKD5rdlWxOWGnw/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMjMzNDA2MzMz/LmpwZWc.jpeg",
+   "width": 600,
+   "height": 600
+  }
+ ],
+ "thumb": "https://i.discogs.com/gwNM7_ZM_zWitHrhxwcEU1guUCFXnRhFy__cqREbVVs/rs:fit/g:sm/q:40/h:150/w:150/czM6Ly9kaXNjb2dz/LWRhdGFiYXNlLWlt/YWdlcy9SLTk5OTg4/OS0xMTg2ODQ4NDc0/LmpwZWc.jpeg",
+ "estimated_weight": 230,
+ "blocked_from_sale": false,
+ "is_offensive": false
+}
