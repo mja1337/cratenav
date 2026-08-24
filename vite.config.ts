@@ -54,6 +54,7 @@ export default defineConfig({
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
         navigateFallback: `${BASE}index.html`,
+        navigateFallbackDenylist: [/\/getsongbpm\.html$/],
         cleanupOutdatedCaches: true,
         runtimeCaching: [
           {
