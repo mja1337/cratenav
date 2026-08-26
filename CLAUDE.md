@@ -236,10 +236,22 @@ See README.md for setup and deployment. This file holds the things that are easy
   key and its relative major share all seven notes, so they sit a whisker apart in profile
   correlation whatever the material, and the bass is what is qualified to separate them. Adding bass
   support into the score would inflate every candidate and quietly loosen the acceptance thresholds
-  that stop noise, so it is a bounded RE-RANK among candidates already within 0.05 of the leader.
-  The tonic margin then has to skip a rival the bass positively contradicts, or the guard vetoes the
-  decision the re-rank just got right — an A in the bass under a C-E-G triad promoted A minor and
-  was then refused because C major still scored a shade higher.
+  that stop noise, so it is a bounded decision among candidates already within 0.05 of the leader.
+- **Reordering candidates without reordering the margin is what makes this go wrong.** Promoting a
+  lower-scoring candidate while still computing `best.score - rival.score` yields a NEGATIVE tonic
+  margin, so the guard refuses the decision the re-rank just made — a real recording reported
+  "tonic -0.04 / 0.03" and declined a key it had identified. Skipping any rival the bass contradicted
+  then left some voicings with no rival at all, collapsing the margin to `best.score - 0`, which
+  passes trivially and disables the guard instead. Both failure modes came from one error, so:
+  the re-rank fires only when register evidence is DECISIVE (0.25) and the tie is at most three-way,
+  and when it fires the margin is measured from the tie group's top score against the best candidate
+  OUTSIDE the group. When it does not fire, the margin is exactly what it was before register
+  evidence existed. `tests/audio-dsp.test.ts` pins that the margin is never negative.
+- **Register evidence must be able to CONFIRM the leader, not only promote a rival.** The decisive
+  gap is between the register evidence's first and second choice, never between it and the profile
+  leader: measured against the leader, a bass that already agreed produced a gap of zero, nothing was
+  decided, and the near-tied rival still vetoed it — an A in the bass under a C-E-G triad refused at
+  a tonic margin of 0.003.
 - **Refuse to answer.** A near-flat chroma (spread < 0.18) or a low correlation means no key.
   Garbage at high confidence is worse than an honest absence; white noise must return nothing.
 - **The beat is an integer SUBDIVISION of the dominant periodicity.** Every statistic computed only

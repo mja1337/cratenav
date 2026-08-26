@@ -1588,11 +1588,31 @@ export function detectKey(
    * Deliberately NOT another term added into the score: the acceptance
    * thresholds are calibrated against the profile correlation, and inflating
    * every candidate's score would quietly loosen them and let noise through.
-   * Instead, only candidates already within a whisker of the leader are
-   * reconsidered, and the register evidence decides between them. A relative
-   * major and its minor always sit that close — they share all seven notes —
-   * which is exactly the tie the bass is qualified to break.
+   * Only candidates already within a whisker of the leader are reconsidered,
+   * and the register evidence decides between them. A relative major and its
+   * minor always sit that close — they share all seven notes — which is exactly
+   * the tie the bass is qualified to break.
+   *
+   * Reordering the list is the dangerous part, and getting it wrong produced
+   * two failures at once. Promoting a lower-scoring candidate and then
+   * measuring `best.score - rival.score` gave a NEGATIVE tonic margin, so the
+   * guard refused the decision the re-rank had just made — a real recording
+   * reported "tonic -0.04 / 0.03" and declined a key it had identified. Patching
+   * that by skipping any rival the bass contradicted then left no rival at all
+   * on some voicings, and the margin collapsed to `best.score - 0`, which
+   * passes trivially and disabled the guard instead.
+   *
+   * So: the re-rank only fires when the register evidence is DECISIVE and the
+   * tie is genuinely two- or three-way, and when it fires the margin is
+   * measured from the tie group's top score against the best candidate OUTSIDE
+   * the group. Within the group the bass has already decided; outside it the
+   * comparison is still meaningful. When it does not fire, the margin is
+   * exactly what it was before register evidence existed.
    */
+  const TIE_BAND = 0.05;
+  const REGISTER_DECISIVE = 0.25;
+  const MAX_TIE = 3;
+
   const upperPeak = Math.max(...upperChroma);
   const registerSupport = (tonic: number, tonality: Tonality): number => {
     const bass = bassPeak ? bassPeakVotes[tonic]! / bassPeak : 0;
@@ -1601,50 +1621,57 @@ export function detectKey(
     const otherThird = upperChroma[(tonic + (tonality === 'major' ? 3 : 4)) % 12]! / upperPeak;
     return bass + Math.max(0, third - otherThird) * 0.5;
   };
-  const leaderScore = candidates[0]?.score ?? 0;
-  const shortlist = candidates.filter((candidate) => leaderScore - candidate.score <= 0.05);
-  if (shortlist.length > 1) {
-    shortlist.sort(
+
+  const profileLeader = candidates[0];
+  const tieGroup = profileLeader
+    ? candidates.filter((candidate) => profileLeader.score - candidate.score <= TIE_BAND)
+    : [];
+
+  let best = profileLeader;
+  let registerDecided = false;
+  if (profileLeader && tieGroup.length > 1 && tieGroup.length <= MAX_TIE) {
+    const ranked = [...tieGroup].sort(
       (a, b) =>
         registerSupport(b.tonic, b.tonality) - registerSupport(a.tonic, a.tonality) ||
         b.score - a.score,
     );
-    const preferred = shortlist[0]!;
-    const index = candidates.indexOf(preferred);
-    if (index > 0) {
-      candidates.splice(index, 1);
-      candidates.unshift(preferred);
+    const winner = ranked[0]!;
+    const runnerUp = ranked[1]!;
+    /*
+     * The gap is between the register evidence's first and second choice, not
+     * between it and the profile leader. Measuring against the leader meant
+     * register evidence could only ever PROMOTE a different candidate: when the
+     * bass already agreed with the leader the gap was zero, nothing was decided,
+     * and the near-tied rival still vetoed it — an A in the bass under a C-E-G
+     * triad refused at a tonic margin of 0.003. Confirming the leader is just as
+     * much a decision as overturning it.
+     */
+    const gap = registerSupport(winner.tonic, winner.tonality) -
+      registerSupport(runnerUp.tonic, runnerUp.tonality);
+    if (gap >= REGISTER_DECISIVE) {
+      best = winner;
+      registerDecided = true;
+      // Surface the chosen key first, so the candidate list reads as the
+      // decision that was actually taken.
+      const index = candidates.indexOf(winner);
+      if (index > 0) {
+        candidates.splice(index, 1);
+        candidates.unshift(winner);
+      }
     }
   }
-
-  const best = candidates[0];
 
   // Tonic and mode are independent decisions. The old detector ignored the
   // opposite mode on the same tonic entirely, allowing A major versus A minor
   // ambiguity to retain high confidence.
-  /**
-   * The tonic margin must not veto a decision the bass already made.
-   *
-   * A minor key and its relative major share all seven notes, so they sit a
-   * whisker apart in profile correlation whatever the material — and the
-   * register re-rank above exists precisely to separate them. Measuring the
-   * margin against a rival the bass has ruled out refused every voicing the
-   * re-rank got right: an A in the bass under a C-E-G triad promoted A minor,
-   * then failed the guard because C major still scored a shade higher.
-   *
-   * A rival is only skipped when the bass positively contradicts it, so an
-   * ambiguity the bass cannot speak to still refuses as before.
-   */
-  const bassShare = (tonic: number) => (bassPeak ? bassPeakVotes[tonic]! / bassPeak : 0);
-  const bassContradicts = (candidate: { tonic: number }) =>
-    best !== undefined &&
-    bassPeak > 0 &&
-    bassShare(best.tonic) >= 0.8 &&
-    bassShare(candidate.tonic) <= 0.3;
   const rival = best
-    ? candidates.find((candidate) => candidate.tonic !== best.tonic && !bassContradicts(candidate))
+    ? candidates.find((candidate) =>
+        candidate.tonic !== best.tonic &&
+        // Only a register-decided tie excuses a rival from the comparison.
+        !(registerDecided && tieGroup.includes(candidate)))
     : undefined;
-  const margin = best ? best.score - (rival?.score ?? 0) : 0;
+  const marginBasis = registerDecided && profileLeader ? profileLeader.score : best?.score ?? 0;
+  const margin = best ? marginBasis - (rival?.score ?? 0) : 0;
   const parallelMode = best
     ? candidates.find((candidate) => candidate.tonic === best.tonic && candidate.tonality !== best.tonality)
     : undefined;

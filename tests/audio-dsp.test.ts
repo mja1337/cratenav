@@ -722,6 +722,53 @@ describe('register evidence', () => {
     expect(result.key?.tonality).toBe('minor');
   });
 
+  it('never reports a negative tonic margin', () => {
+    /*
+     * The margin is a distance, so a negative value is nonsense — and it is
+     * what a real recording showed ("tonic -0.04 / 0.03"). It came from the
+     * register re-rank promoting a lower-scoring candidate while the margin was
+     * still measured as best minus rival, so the guard refused the very
+     * decision the re-rank had just made.
+     */
+    const voicings: { label: string; voices: { freq: number; gain: number }[] }[] = [
+      { label: 'Am7 voicing', voices: [
+        { freq: 110, gain: 0.5 }, { freq: 261.63, gain: 0.25 },
+        { freq: 329.63, gain: 0.25 }, { freq: 392, gain: 0.25 },
+      ] },
+      { label: 'C in the bass under A-C-E', voices: [
+        { freq: 130.81, gain: 0.5 }, { freq: 220, gain: 0.25 },
+        { freq: 261.63, gain: 0.25 }, { freq: 329.63, gain: 0.25 },
+      ] },
+      { label: 'root and fifth only', voices: [
+        { freq: 110, gain: 0.5 }, { freq: 220, gain: 0.3 }, { freq: 329.63, gain: 0.3 },
+      ] },
+    ];
+    for (const { label, voices } of voicings) {
+      for (const profile of ['general', 'drum-and-bass'] as const) {
+        const margin = detectKey(phaseTones(8, voices), SR, profile).keyDiagnostics?.margin;
+        expect(margin, `${label} (${profile})`).toBeDefined();
+        expect(margin, `${label} (${profile}) reported a negative margin`)
+          .toBeGreaterThanOrEqual(0);
+      }
+    }
+  });
+
+  it('does not let a near-tied rival veto a key the bass confirms', () => {
+    // A minor and F major sit 0.003 apart on profile correlation here, which
+    // the tonic guard refuses on its own. The bass says A, and confirming the
+    // leader is as much a decision as overturning it.
+    const material = phaseTones(8, [
+      { freq: 110, gain: 0.5 },
+      { freq: 261.63, gain: 0.25 },
+      { freq: 329.63, gain: 0.25 },
+      { freq: 392, gain: 0.25 },
+    ]);
+    const result = detectKey(material, SR);
+    expect(result.keyDiagnostics?.rejectedBy).toBeUndefined();
+    expect(result.key?.pitchClass).toBe('A');
+    expect(result.key?.tonality).toBe('minor');
+  });
+
   it('does not let one bass peak manufacture a key out of noise', () => {
     // The re-rank must not become a way past the noise guards.
     const noisy = whiteNoise(8);
