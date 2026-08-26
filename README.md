@@ -252,6 +252,14 @@ Without that variable, the app now explicitly advises running locally while the 
 
 Online BPM and key enrichment can use [GetSongBPM](https://getsongbpm.com/). Huge thanks to their team for providing an awesome music-data service and API for projects like cratenav. [Request GetSongBPM API access](https://getsongbpm.com/api).
 
+On-device key analysis uses [Essentia.js](https://mtg.github.io/essentia.js/) and [Essentia](https://essentia.upf.edu/) from the Music Technology Group at Universitat Pompeu Fabra. Essentia.js is distributed under the GNU Affero General Public License v3.0; its source is available from the [Essentia.js repository](https://github.com/MTG/essentia.js). See [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for details.
+
+## Licence
+
+Copyright (C) 2026 CrateNav contributors.
+
+CrateNav is free software licensed under the [GNU Affero General Public License v3.0](LICENSE). You may redistribute and modify it under those terms. CrateNav is provided without warranty. The complete corresponding source for the public application is available in this repository.
+
 ## Architecture
 
 ```

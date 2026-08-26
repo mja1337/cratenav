@@ -1,5 +1,5 @@
-import type { Artwork, KeyNotation, Track, TrackAnalysis } from '@/domain/types';
-import { formatCamelot, formatMusicalKey } from '@/harmonic/camelot';
+import type { Artwork, CamelotKey, KeyNotation, MusicalKey, Track, TrackAnalysis } from '@/domain/types';
+import { formatCamelot, formatMusicalKey, musicalKeyToCamelot, parseKey } from '@/harmonic/camelot';
 
 /** Presentation helpers shared across views. */
 
@@ -81,4 +81,43 @@ export function formatEta(seconds: number | undefined): string | null {
   if (seconds < 60) return `${Math.round(seconds)}s remaining`;
   const minutes = Math.round(seconds / 60);
   return `about ${minutes} ${minutes === 1 ? 'minute' : 'minutes'} remaining`;
+}
+
+
+/**
+ * A key in BOTH notations, the reader's preferred one leading.
+ *
+ * Camelot is what a DJ reads off a sticker and off the wheel; the musical name
+ * is what every source database reports. Showing only one forces a conversion
+ * in the middle of a mix, and since a semitone is SEVEN Camelot steps that is
+ * exactly the conversion people get wrong. The spec §12 toggle decides which
+ * notation leads, not whether the other one is available.
+ */
+export function formatKeyPair(
+  key: MusicalKey | undefined,
+  camelot: CamelotKey | undefined,
+  notation: KeyNotation,
+): string | undefined {
+  const wheelKey = camelot ?? (key ? musicalKeyToCamelot(key) ?? undefined : undefined);
+  const musical = key ? formatMusicalKey(key) : undefined;
+  const wheel = wheelKey ? formatCamelot(wheelKey) : undefined;
+  if (!musical) return wheel;
+  if (!wheel) return musical;
+  return notation === 'camelot' ? `${wheel} · ${musical}` : `${musical} · ${wheel}`;
+}
+
+/**
+ * Same, for a key the detector has already rendered as a name ("A minor").
+ *
+ * Diagnostics and section votes carry key names as strings rather than typed
+ * keys. Falls back to the original text if it will not parse, so an unexpected
+ * label degrades to being unannotated rather than disappearing.
+ */
+export function formatKeyNamePair(
+  name: string | undefined,
+  notation: KeyNotation,
+): string | undefined {
+  if (!name) return undefined;
+  const parsed = parseKey(name);
+  return parsed ? formatKeyPair(parsed, undefined, notation) : name;
 }

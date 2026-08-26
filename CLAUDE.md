@@ -39,6 +39,18 @@ See README.md for setup and deployment. This file holds the things that are easy
   that the Discogs webpage only renders once.
 - Every track gets a placeholder analysis row at import. Those empty rows must NOT count as
   "has analysis" — see `hasMeaningfulAnalysis`.
+- Every key shown while analysing carries its Camelot reference alongside the musical name, via
+  `formatKeyPair` / `formatKeyNamePair`. The spec §12 notation toggle chooses which one LEADS, never
+  whether the other is available: a semitone is seven Camelot steps, so converting in your head
+  mid-mix is exactly the arithmetic that goes wrong. This covers the per-window captured samples,
+  the diagnostics candidate scores and tonal-section votes, and the Set button — the microphone
+  panel used to print musical names only, so the recorded proposal could not be read against a
+  sticker or the wheel.
+- The recorded result is laid OVER what is already loaded, never merged into it. "Recorded
+  (proposed)" / "Saved track" / "Matching database" are three separate rows with their own agreement
+  lines, and nothing is written until a Set button is pressed. The agreement comparisons run on
+  musical names while the display shows both notations; keep those two concerns separate or a
+  notation change silently alters what counts as a match.
 - No state is signalled by colour alone; badges always carry text and a glyph.
 - Every `input`, `select` and `textarea` needs an `id` or `name` (use both for normal visible
   controls), and every `<label for>` must target the matching id. Chrome reports this in Issues
@@ -49,6 +61,28 @@ See README.md for setup and deployment. This file holds the things that are easy
 - The set-plan picker updates rows in place; re-rendering on every tap loses scroll position.
 - The analysis queue caps its list at 200 rows but states the true total: a silent truncation reads
   as "that is all there is".
+- An incremental collection sync relies on the client asking for `sort=added&sort_order=desc`, so
+  additions are at the top. It stops after the first page that contributes nothing new: once a whole
+  page holds no copy we lack, everything older is older still. A count of consecutive known copies
+  was tried first and is the wrong shape — the threshold must be smaller than a page to ever fire yet
+  larger than any run of known copies among the additions, and those conflict for a small collection
+  or a big batch of new records.
+- **Only a full pass can see a departure.** An incremental read stops once the additions run out, so
+  a record removed from deep in the collection was simply never read — treating its absence as a
+  departure would flag most of the library as gone. `fullSyncRecommended` is the escalation signal:
+  when Discogs' own item count does not equal what we hold plus what we just added, something we did
+  not read has changed. The auto pass then re-reads in full, and forces a full pass weekly regardless.
+- An incremental pass must not renumber `copyIndex`. A full read sees every copy so it can number
+  from zero; an incremental read may see only the newest copy of a doubled release, so its counters
+  are seeded from what is already stored and existing copies keep the number they have.
+- An incremental pass does NOT see an edit to an old copy's rating or condition, because that copy is
+  never re-read. That is the accepted cost of one request instead of six; the weekly full pass
+  catches those up.
+- The unattended catch-up chain never applies a departure. It passes `confirmDepartures: () => false`
+  so removals are retained and reported, because a record leaving the collection is a user decision
+  (see the retention invariant above). It also stands aside for a sync or enrichment the user
+  started, refuses inside a 15 minute window, and reads everything the first time because there is
+  nothing yet to compare against.
 - Long-running Discogs and enrichment work belongs to the app-level Store/DiscogsSync services,
   never a view lifecycle. Navigation must not abort it; the shell owns persistent progress and
   global Pause/Stop controls.
@@ -124,6 +158,18 @@ See README.md for setup and deployment. This file holds the things that are easy
   `VITE_METADATA_PROXY_BASE`. Without one, the provider must remain honestly unavailable while
   offline/manual features continue to work.
 
+## Licensing
+
+- **Essentia.js is AGPL-3.0, and bundling it makes the shipped app AGPL-3.0.** That obligation comes
+  from distributing the WASM build to browsers, not from the LICENSE file, so it applies the moment
+  the PWA is deployed. `LICENSE`, `THIRD_PARTY_NOTICES.md`, the README licence section and the
+  `license` field in `package.json` exist to satisfy it and must stay in step. Removing Essentia is
+  the only way back to a permissive licence; UPF also sells a commercial Essentia licence.
+- Essentia was the project's FIRST runtime dependency. It arrives as a ~2.5 MB WASM worker chunk and
+  took the service-worker precache from 324 KiB to about 2.8 MB, which is why
+  `maximumFileSizeToCacheInBytes` had to be raised. Weigh that against a phone on mobile data before
+  adding anything else of that size.
+
 ## Gotchas hit during the build
 
 - `<img>` served from cache completes before a `load` listener attaches, so `opacity: 0` + reveal-on-load
@@ -154,6 +200,46 @@ See README.md for setup and deployment. This file holds the things that are easy
   toward their lower fundamental while retaining some direct evidence for real chord tones. Keep
   the white-noise and single-bass-note regression tests whenever this changes; a future NNLS chroma
   implementation still needs validation against real source-labelled audio.
+- **Never write `sin(2*pi*f(t)*t)` for a vibrato in a test fixture.** Its instantaneous frequency is
+  `f(t) + t*f'(t)`, and that second term grows without bound: a "2 cent" wobble becomes a 78 Hz
+  sweep by eight seconds, inventing partials the signal never had. Three separate "the detector is
+  broken" findings came from that one line — a chroma read as D major, phantom peaks at 146/170/193
+  Hz for a 220/262/330 chord, and a 131.6 BPM latch. Accumulate phase instead. Fixtures must also
+  never clip (scale the mix, don't limit it) — clipping manufactures intermodulation products. When
+  a synthetic result looks like a detector bug, suspect the generator first and verify its spectrum.
+- **Tempo: the amplitude envelope cannot separate a kick from a pad.** Sustained partials
+  interfering inside one analysis frame modulate total energy with no volume change at all, and a
+  pad at a quarter of drum level pulled 140, 160, 174 and 186 BPM onto the same 177.2 reading. The
+  `percussive` voter answers this: per-bin spectral flux (SuperFlux, max-filtered across +/-1 bin so
+  vibrato and wow do not read as onsets) over a spectrum with a slow per-bin steady FLOOR subtracted.
+  The floor must be a slow MINIMUM, not a mean — a mean-follower with a time constant near one beat
+  tracked the kick train itself, cancelled every second kick and halved twelve fixtures.
+- **Superseded, do not reinstate: replacing the amplitude envelope with spectral flux.** The
+  metrical selection is tuned to how the amplitude envelope weights a loud kick against a quiet hat.
+  Spectral flux with sqrt compression over-weights broadband hats and doubled 88 and 100; linear
+  magnitude over-weights the kick and halved everything above 145. Flux belongs ALONGSIDE the
+  amplitude bands as one more vote, never in place of them.
+- **Superseded, do not reinstate: choosing the period by best-phase grid alignment.** Autocorrelation
+  is phase-blind, so scoring candidates by where a grid at that period lands looks like the missing
+  discriminator. It is not: on a kick-every-beat/snare-every-other pattern the two-beat grid has both
+  a high hit rate AND most of the onset energy, so hit x coverage prefers it and 128, 133, 145 and
+  150 all halved. The ambiguity is real in the signal and no phase statistic resolves it.
+- **KNOWN LIMIT: a sustained chord with no percussion at all still reports a tempo** (an A minor pad
+  alone reads 177.2 BPM). Enough interference survives into the flux envelope that the percussive
+  voter cannot veto it. Left alone deliberately: a DJ analyses records that have drums, and the
+  realistic case of a pad OVER a break is covered by tests.
+- **Key profiles are Temperley's, not Krumhansl-Kessler.** Both name an ideal minor triad correctly;
+  the difference is on ambiguous input. On a power chord with no third, Krumhansl's major wins
+  outright — a confident answer to an open question — while Temperley's modes score close enough for
+  the `mode` guard to refuse. Both sets stay exported so the choice is settled by test, not asserted.
+- **Register evidence breaks a relative-key tie; it must not be another term in the score.** A minor
+  key and its relative major share all seven notes, so they sit a whisker apart in profile
+  correlation whatever the material, and the bass is what is qualified to separate them. Adding bass
+  support into the score would inflate every candidate and quietly loosen the acceptance thresholds
+  that stop noise, so it is a bounded RE-RANK among candidates already within 0.05 of the leader.
+  The tonic margin then has to skip a rival the bass positively contradicts, or the guard vetoes the
+  decision the re-rank just got right — an A in the bass under a C-E-G triad promoted A minor and
+  was then refused because C major still scored a shade higher.
 - **Refuse to answer.** A near-flat chroma (spread < 0.18) or a low correlation means no key.
   Garbage at high confidence is worse than an honest absence; white noise must return nothing.
 - **The beat is an integer SUBDIVISION of the dominant periodicity.** Every statistic computed only

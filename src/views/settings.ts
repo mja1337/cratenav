@@ -1,4 +1,5 @@
 import type { Store } from '@/app/store';
+import { APP_VERSION } from '@/app/version';
 import type { View } from './types';
 import type { SyncProgress } from '@/discogs/sync';
 import { stat } from '@/components/badges';
@@ -7,6 +8,7 @@ import { formatCount, formatRelativeTime } from '@/components/format';
 import { icon } from '@/components/icons';
 import { clearLibrary, countFailedHydration, exportLibrary, importLibrary } from '@/data/repositories';
 import { DECK_PROFILES } from '@/pitch/deck';
+import { runCatchUp } from '@/app/automatic-sync';
 import { clear, h, mount } from '@/utils/dom';
 
 /**
@@ -361,6 +363,29 @@ export function createSettingsView(store: Store): View {
     }
   };
 
+  /**
+   * The whole chain in one gesture: collection, then metadata, then online
+   * lookup. Identical to what happens automatically on open, so a user who has
+   * switched the automatic pass off still has one button rather than four.
+   */
+  const runCatchUpNow = async () => {
+    busy = true;
+    renderActions();
+    try {
+      const outcome = await runCatchUp(store, { force: true });
+      await store.reload();
+      if (!outcome.ran) {
+        store.notify('info', `Nothing to do — ${outcome.skippedBecause}.`);
+      } else if (!outcome.added && !outcome.hydrated && !outcome.enriched) {
+        store.notify('info', 'Already up to date with Discogs.');
+      }
+    } finally {
+      busy = false;
+      await refreshStats();
+      renderActions();
+    }
+  };
+
   const runHydration = async () => {
     busy = true;
     renderActions();
@@ -418,6 +443,20 @@ export function createSettingsView(store: Store): View {
           icon('sync'),
           hasLibrary ? 'Sync collection' : 'Import collection',
         ),
+        hasLibrary
+          ? h(
+              'button',
+              {
+                class: 'button',
+                type: 'button',
+                disabled: busy,
+                title: 'Check Discogs for new records, fetch their metadata, then look up BPM and key',
+                onclick: () => void runCatchUpNow(),
+              },
+              icon('sync'),
+              'Catch up now',
+            )
+          : null,
         pendingHydration
           ? h(
               'button',
@@ -1004,18 +1043,63 @@ export function createSettingsView(store: Store): View {
     h(
       'p',
       { class: 'field__hint' },
+      `cratenav v${APP_VERSION} is free software licensed under the `,
+      h('a', {
+        href: 'https://www.gnu.org/licenses/agpl-3.0.html',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        text: 'GNU Affero General Public License v3.0',
+      }),
+      '. You may redistribute and modify it under that licence. It comes without warranty. ',
+      h('a', {
+        href: 'https://github.com/mja1337/cratenav',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        text: 'View or download the complete source code',
+      }),
+      '.',
+    ),
+    h(
+      'p',
+      { class: 'field__hint' },
+      'On-device key analysis includes ',
+      h('a', {
+        href: 'https://mtg.github.io/essentia.js/',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        text: 'Essentia.js',
+      }),
+      ' and ',
+      h('a', {
+        href: 'https://essentia.upf.edu/',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        text: 'Essentia',
+      }),
+      ' from the Music Technology Group at Universitat Pompeu Fabra, used under the GNU AGPL v3. ',
+      h('a', {
+        href: 'https://github.com/MTG/essentia.js',
+        target: '_blank',
+        rel: 'noopener noreferrer',
+        text: 'Essentia.js source',
+      }),
+      '.',
+    ),
+    h(
+      'p',
+      { class: 'field__hint' },
       'Online BPM and key enrichment can use ',
       h('a', {
         href: 'https://getsongbpm.com/',
         target: '_blank',
-        rel: 'noopener',
+        rel: 'noopener noreferrer',
         text: 'GetSongBPM',
       }),
       '. Huge thanks to their team for making their awesome music-data service available to projects like cratenav. ',
       h('a', {
         href: 'https://getsongbpm.com/api',
         target: '_blank',
-        rel: 'noopener',
+        rel: 'noopener noreferrer',
         text: 'Request GetSongBPM API access',
       }),
       '.',
@@ -1026,9 +1110,54 @@ export function createSettingsView(store: Store): View {
     }),
   );
 
+  const autoSyncCard = h(
+    'div',
+    { class: 'card stack' },
+    h('h2', { class: 'section-title', text: 'Catch up automatically' }),
+    h('p', {
+      class: 'field__hint',
+      text: 'On open, check Discogs for records added since last time, fetch their metadata, then look up BPM and key for the new tracks. Records that have LEFT your Discogs collection are never removed without asking you first.',
+    }),
+    h(
+      'div',
+      { class: 'row row--wrap' },
+      h('button', {
+        class: 'chip', type: 'button', 'data-auto-sync': 'on',
+        'aria-pressed': String(store.snapshot.settings.autoSync !== false),
+        text: 'On open',
+        onclick: async () => {
+          await store.updateSettings({ autoSync: true });
+          renderAutoSync();
+        },
+      }),
+      h('button', {
+        class: 'chip', type: 'button', 'data-auto-sync': 'off',
+        'aria-pressed': String(store.snapshot.settings.autoSync === false),
+        text: 'Manual only',
+        onclick: async () => {
+          await store.updateSettings({ autoSync: false });
+          renderAutoSync();
+        },
+      }),
+    ),
+    h('p', {
+      class: 'field__hint',
+      text: 'It only checks the newest additions rather than re-reading the whole collection, so it costs about one request. A full read still runs weekly, because only a full read can notice a record you have sold.',
+    }),
+  );
+
+  function renderAutoSync(): void {
+    const on = store.snapshot.settings.autoSync !== false;
+    for (const node of autoSyncCard.querySelectorAll<HTMLElement>('button.chip')) {
+      const wants = node.dataset['autoSync'] === 'on';
+      node.setAttribute('aria-pressed', String(wants === on));
+    }
+  }
+
   element.append(
     statsSlot,
     discogsCard,
+    autoSyncCard,
     deckCard,
     appearanceCard,
     libraryModeCard,

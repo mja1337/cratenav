@@ -433,6 +433,11 @@ export interface Settings {
   preferredMaxPitchPercent?: number;
   /** Hide Discogs CD-positioned tracks from DJ workflows. Default: false. */
   vinylOnlyMode?: boolean;
+  /**
+   * Catch up with Discogs on open: new records, then metadata, then online
+   * lookup. Default on; `false` disables it. Spec §5.
+   */
+  autoSync?: boolean;
   /** User-created additions to the built-in replacement sleeve palette. */
   customSleeveColors?: SleeveColor[];
   updatedAt: string;

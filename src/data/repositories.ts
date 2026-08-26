@@ -48,6 +48,8 @@ export async function saveSettings(settings: Settings): Promise<Settings> {
 export interface SyncState {
   id: 'discogs';
   lastCollectionSyncAt?: string;
+  /** Last pass that read EVERY page, and so the last time departures could be seen. */
+  lastFullSyncAt?: string;
   lastMetadataSweepAt?: string;
   /** Instance ids seen in the most recent collection sync. */
   lastSeenCount?: number;

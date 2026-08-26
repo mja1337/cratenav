@@ -1,5 +1,14 @@
 import { describe, expect, it } from 'vitest';
-import { createAnalyser, detectBpm, detectKey, type AudioSource } from '@/analysis/audio';
+import {
+  createAnalyser,
+  detectBpm,
+  detectKey,
+  KRUMHANSL_MAJOR,
+  KRUMHANSL_MINOR,
+  TEMPERLEY_MAJOR,
+  TEMPERLEY_MINOR,
+  type AudioSource,
+} from '@/analysis/audio';
 
 /**
  * Signal-level regression tests for the microphone DSP.
@@ -117,7 +126,9 @@ describe('tempo detection', () => {
     expect(result.bpm).toBeLessThan(178);
     expect(result.bpmDiagnostics?.profile).toBe('drum-and-bass');
     expect(result.bpmDiagnostics?.bands.map((entry) => entry.band)).toEqual([
-      'full', 'low', 'mid', 'high',
+      // 'percussive' is a fifth, independent voter: spectral flux over a
+      // steady-floor-suppressed spectrum, so sustained harmony cannot move it.
+      'full', 'low', 'mid', 'high', 'percussive',
     ]);
     expect(result.bpmDiagnostics?.candidates.length).toBeGreaterThan(0);
   });
@@ -558,5 +569,163 @@ describe('onset-dense tempo', () => {
       // 210 is the search ceiling; reporting it means the boundary was chosen.
       expect(detected).toBeLessThan(205);
     }
+  });
+});
+
+/**
+ * Regressions for the accuracy work of August 2026.
+ *
+ * Every generator here accumulates PHASE. Writing `sin(2*pi*f(t)*t)` for a
+ * vibrato instead gives an instantaneous frequency of f(t) + t*f'(t), whose
+ * second term grows without bound — a "2 cent" wobble becomes a 78 Hz sweep by
+ * eight seconds, which manufactures partials that are not in the signal and
+ * then gets blamed on the detector. Three separate false findings came from
+ * that mistake before it was spotted.
+ */
+function phaseTones(
+  seconds: number,
+  voices: readonly { freq: number; gain: number; vibratoCents?: number; rate?: number }[],
+): Float32Array {
+  const out = new Float32Array(Math.floor(SR * seconds));
+  const phase = voices.map(() => 0);
+  for (let i = 0; i < out.length; i += 1) {
+    const t = i / SR;
+    let value = 0;
+    for (let n = 0; n < voices.length; n += 1) {
+      const voice = voices[n]!;
+      const depth = 2 ** ((voice.vibratoCents ?? 0) / 1200) - 1;
+      const frequency = voice.freq * (1 + depth * Math.sin(2 * Math.PI * (voice.rate ?? 5) * t));
+      phase[n] = phase[n]! + (2 * Math.PI * frequency) / SR;
+      value += voice.gain * Math.sin(phase[n]!);
+    }
+    out[i] = value;
+  }
+  return out;
+}
+
+/** Scale rather than clip: clipping manufactures intermodulation products. */
+function blend(...signals: readonly Float32Array[]): Float32Array {
+  const length = Math.max(...signals.map((signal) => signal.length));
+  const out = new Float32Array(length);
+  for (const signal of signals) {
+    for (let i = 0; i < signal.length; i += 1) out[i] = out[i]! + signal[i]!;
+  }
+  let peak = 0;
+  for (const value of out) peak = Math.max(peak, Math.abs(value));
+  if (peak > 0.95) for (let i = 0; i < out.length; i += 1) out[i] = (out[i]! / peak) * 0.95;
+  return out;
+}
+
+const A_MINOR_PAD = [
+  { freq: 220, gain: 0.25, vibratoCents: 15, rate: 4.7 },
+  { freq: 261.63, gain: 0.25, vibratoCents: 15, rate: 5.3 },
+  { freq: 329.63, gain: 0.25, vibratoCents: 15, rate: 6.1 },
+] as const;
+
+describe('tempo through sustained harmony', () => {
+  // The amplitude envelope cannot separate a kick from a pad: several sustained
+  // partials interfering inside one frame modulate total energy on their own,
+  // with no volume change at all. A pad at a quarter of drum level pulled 140,
+  // 160, 174 and 186 BPM onto the same 177.2 reading — the pad's interference
+  // rather than the music. The percussive voter is deaf to anything steady.
+  for (const bpm of [160, 174, 186]) {
+    it(`holds ${bpm} BPM under a sustained pad`, () => {
+      const result = detectBpm(blend(groove(bpm), phaseTones(8, A_MINOR_PAD)), SR, 'drum-and-bass');
+      expect(result.bpm, `no tempo for ${bpm}`).toBeDefined();
+      expect(Math.abs((result.bpm! - bpm) / bpm) * 100).toBeLessThan(2);
+    });
+  }
+
+  // KNOWN LIMIT: a sustained chord with NO percussion still reports a tempo
+  // (an A minor pad alone comes back as 177.2 BPM). Interference between
+  // partials modulates total energy, and enough of it survives into the
+  // spectral-flux envelope that the percussive voter cannot veto it either.
+  // Not chased further because a DJ analyses records that have drums; the
+  // realistic case — a pad OVER a break — is what the tests above cover.
+});
+
+describe('key profile choice', () => {
+  const rotate = (profile: readonly number[], tonic: number) =>
+    profile.map((_, index) => profile[(index - tonic + 12) % 12]!);
+  const pearson = (left: readonly number[], right: readonly number[]) => {
+    const meanLeft = left.reduce((sum, value) => sum + value, 0) / left.length;
+    const meanRight = right.reduce((sum, value) => sum + value, 0) / right.length;
+    let numerator = 0;
+    let varLeft = 0;
+    let varRight = 0;
+    for (let i = 0; i < left.length; i += 1) {
+      const a = left[i]! - meanLeft;
+      const b = right[i]! - meanRight;
+      numerator += a * b;
+      varLeft += a * a;
+      varRight += b * b;
+    }
+    return varLeft && varRight ? numerator / Math.sqrt(varLeft * varRight) : 0;
+  };
+  const chromaOf = (pitchClasses: readonly number[]) =>
+    Array.from({ length: 12 }, (_, index) => (pitchClasses.includes(index) ? 1 : 0));
+  const modeGap = (
+    major: readonly number[],
+    minor: readonly number[],
+    chroma: readonly number[],
+    tonic: number,
+  ) => Math.abs(pearson(chroma, rotate(major, tonic)) - pearson(chroma, rotate(minor, tonic)));
+
+  it('both sets name an ideal minor triad correctly', () => {
+    // A, C, E. Neither set is broken on the easy case; the difference is below.
+    const chroma = chromaOf([9, 0, 4]);
+    for (const [major, minor] of [
+      [KRUMHANSL_MAJOR, KRUMHANSL_MINOR],
+      [TEMPERLEY_MAJOR, TEMPERLEY_MINOR],
+    ] as const) {
+      const best = Array.from({ length: 24 }, (_, index) => {
+        const tonic = index % 12;
+        const isMajor = index < 12;
+        return {
+          tonic,
+          isMajor,
+          score: pearson(chroma, rotate(isMajor ? major : minor, tonic)),
+        };
+      }).sort((a, b) => b.score - a.score)[0]!;
+      expect(best.tonic).toBe(9);
+      expect(best.isMajor).toBe(false);
+    }
+  });
+
+  it('Temperley separates the modes where Krumhansl asserts one', () => {
+    // A power chord: root and fifth, no third. Major versus minor is genuinely
+    // undetermined, so the two profiles should score alike and let the mode
+    // guard refuse. Krumhansl's shapes are close enough overall that its major
+    // wins this outright, which is a confident answer to an open question.
+    const powerChord = chromaOf([9, 4]);
+    const krumhansl = modeGap(KRUMHANSL_MAJOR, KRUMHANSL_MINOR, powerChord, 9);
+    const temperley = modeGap(TEMPERLEY_MAJOR, TEMPERLEY_MINOR, powerChord, 9);
+    expect(temperley).toBeLessThan(krumhansl);
+  });
+});
+
+describe('register evidence', () => {
+  it('lets the bass break a relative-key tie instead of refusing', () => {
+    // A2 under a C-E-G triad is an A minor 7 voicing. The upper triad alone
+    // says C major and the two are inseparable by profile — they share all
+    // seven notes — so the tonic margin used to refuse. The bass names A.
+    const material = phaseTones(8, [
+      { freq: 110, gain: 0.5 },
+      { freq: 261.63, gain: 0.25 },
+      { freq: 329.63, gain: 0.25 },
+      { freq: 392, gain: 0.25 },
+    ]);
+    const result = detectKey(material, SR);
+    expect(result.keyDiagnostics?.rangeEvidence?.bassRoot).toBe('A');
+    expect(result.key).toBeDefined();
+    expect(result.key?.pitchClass).toBe('A');
+    expect(result.key?.tonality).toBe('minor');
+  });
+
+  it('does not let one bass peak manufacture a key out of noise', () => {
+    // The re-rank must not become a way past the noise guards.
+    const noisy = whiteNoise(8);
+    expect(detectKey(noisy, SR).key).toBeUndefined();
+    expect(detectKey(noisy, SR, 'drum-and-bass').key).toBeUndefined();
   });
 });

@@ -8,10 +8,12 @@ import {
   type AudioInputDevice,
   type RollingResult,
   type KeyDiagnostics,
+  type KeyEngineReading,
   type AnalysisProfile,
 } from '@/analysis/audio';
 import { normaliseBpm } from '@/bpm/normalise';
 import { formatCamelot, formatMusicalKey, musicalKeyToCamelot } from '@/harmonic/camelot';
+import { formatKeyNamePair, formatKeyPair } from './format';
 import { sameTrackTitle } from '@/enrichment/matching';
 import { h } from '@/utils/dom';
 
@@ -59,6 +61,16 @@ function chromaLabel(diagnostics: KeyDiagnostics): string {
     .map((entry) => entry.name)
     .join(', ');
   return `Chroma: strongest notes ${strongest}`;
+}
+
+function engineReading(reading: KeyEngineReading, notation: 'camelot' | 'musical'): string {
+  const key = reading.key
+    ? formatKeyPair(reading.key, musicalKeyToCamelot(reading.key) ?? undefined, notation)
+    : undefined;
+  const confidence = reading.confidence === undefined ? '' : ` · ${Math.round(reading.confidence * 100)}%`;
+  const elapsed = reading.elapsedMs === undefined ? '' : ` · ${Math.round(reading.elapsedMs)} ms`;
+  if (reading.status === 'error') return `error · ${reading.detail ?? 'unavailable'}${elapsed}`;
+  return key ? `${key}${confidence}${elapsed}` : `no result${reading.detail ? ` · ${reading.detail}` : ''}${elapsed}`;
 }
 
 export function createLiveAudioAnalysis(
@@ -419,13 +431,34 @@ export function createLiveAudioAnalysis(
       'div',
       { class: 'source-comparison stack stack--tight' },
       h('h3', { class: 'section-title', text: 'Recorded comparison' }),
+      h('p', {
+        class: 'field__hint',
+        text: 'What this recording proposes, laid over what is already loaded for this track. Nothing here overwrites anything until you press a Set button.',
+      }),
       h('div', { class: 'source-comparison__grid' },
-        h('span', { text: 'Recorded' }),
-        h('strong', { text: [result.bpm === undefined ? undefined : `${result.bpm.toFixed(1)} BPM`, localKey].filter(Boolean).join(' · ') || 'collecting…' }),
+        // Keys are shown in BOTH notations throughout: the agreement rows below
+        // compare musical names, but a DJ acts on the Camelot number.
+        h('span', { text: 'Recorded (proposed)' }),
+        h('strong', {
+          text: [
+            result.bpm === undefined ? undefined : `${result.bpm.toFixed(1)} BPM`,
+            localKey ? formatKeyPair(result.key, result.camelot, currentNotation) : undefined,
+          ].filter(Boolean).join(' · ') || 'collecting…',
+        }),
         h('span', { text: 'Saved track' }),
-        h('strong', { text: [analysis?.canonicalBpm === undefined ? undefined : `${analysis.canonicalBpm.toFixed(1)} BPM`, savedKey].filter(Boolean).join(' · ') || 'nothing saved yet' }),
+        h('strong', {
+          text: [
+            analysis?.canonicalBpm === undefined ? undefined : `${analysis.canonicalBpm.toFixed(1)} BPM`,
+            savedKey ? formatKeyPair(analysis?.canonicalKey, analysis?.camelotKey, currentNotation) : undefined,
+          ].filter(Boolean).join(' · ') || 'nothing saved yet',
+        }),
         h('span', { text: 'Matching database' }),
-        h('strong', { text: [bpm ? `${bpm[0]} BPM` : undefined, key?.[0]].filter(Boolean).join(' · ') || 'no usable value' }),
+        h('strong', {
+          text: [
+            bpm ? `${bpm[0]} BPM` : undefined,
+            formatKeyNamePair(key?.[0], currentNotation),
+          ].filter(Boolean).join(' · ') || 'no usable value',
+        }),
         h('span', { text: 'Vs saved' }),
         h('strong', {
           text: [
@@ -441,7 +474,9 @@ export function createLiveAudioAnalysis(
           ].filter(Boolean).join(' · ') || 'waiting for local result',
         }),
         assistedKey ? h('span', { text: 'Close alternative' }) : null,
-        assistedKey ? h('strong', { text: `${assistedKey} · trusted database sources support a close alternative; the Set button still saves the recorded result` }) : null,
+        assistedKey ? h('strong', {
+          text: `${formatKeyNamePair(assistedKey, currentNotation)} · trusted database sources support a close alternative; the Set button still saves the recorded result`,
+        }) : null,
       ),
       h('p', {
         class: 'field__hint',
@@ -457,6 +492,7 @@ export function createLiveAudioAnalysis(
     if (!frame) return null;
     const bpm = frame.bpmDiagnostics;
     const key = frame.keyDiagnostics;
+    const comparison = frame.keyComparison;
     return h(
       'div',
       { class: 'analysis-evidence stack stack--tight' },
@@ -474,17 +510,30 @@ export function createLiveAudioAnalysis(
           text: `Tempo hypotheses: ${bpm.candidates.map((candidate) => `${candidate.bpm.toFixed(1)} (${candidate.bands.join('+')})`).join(' · ')}`,
         }) : null,
       ) : null,
+      comparison ? h(
+        'div', { class: 'analysis-evidence__block' },
+        h('strong', { text: 'Key engines · identical captured samples' }),
+        h('div', { class: 'analysis-evidence__grid' },
+          h('span', { text: `Essentia: ${engineReading(comparison.essentia, currentNotation)}` }),
+          h('span', { text: `Custom DSP: ${engineReading(comparison.custom, currentNotation)}` }),
+          h('span', {
+            text: comparison.agreed === undefined
+              ? `Selected: ${comparison.selected} · only one engine answered`
+              : `${comparison.agreed ? 'Engines agree' : 'Engines disagree'} · selected ${comparison.selected}`,
+          }),
+        ),
+      ) : null,
       key ? h(
         'div', { class: 'analysis-evidence__block' },
-        h('strong', { text: `Key profile correlation · spread ${key.spread.toFixed(2)} · tonic margin ${key.margin.toFixed(2)}${key.modeMargin === undefined ? '' : ` · mode margin ${key.modeMargin.toFixed(2)}`}${key.windows ? ` · tonal windows ${key.windows.accepted}/${key.windows.accepted + key.windows.rejected}` : ''}${key.peakCounts ? ` · peaks kept ${key.peakCounts.accepted}, rejected ${key.peakCounts.rejected}, folded ${key.peakCounts.harmonicsFolded}` : ''}${key.transientPeaksAttenuated ? ` · percussive/transient peaks reduced ${key.transientPeaksAttenuated}` : ''}` }),
+        h('strong', { text: `Custom DSP evidence · spread ${key.spread.toFixed(2)} · tonic margin ${key.margin.toFixed(2)}${key.modeMargin === undefined ? '' : ` · mode margin ${key.modeMargin.toFixed(2)}`}${key.windows ? ` · tonal windows ${key.windows.accepted}/${key.windows.accepted + key.windows.rejected}` : ''}${key.peakCounts ? ` · peaks kept ${key.peakCounts.accepted}, rejected ${key.peakCounts.rejected}, folded ${key.peakCounts.harmonicsFolded}` : ''}${key.transientPeaksAttenuated ? ` · percussive/transient peaks reduced ${key.transientPeaksAttenuated}` : ''}` }),
         h('div', { class: 'analysis-evidence__grid' },
           ...(key.candidates ?? []).map((candidate) => h('span', {
-            text: `${candidate.name}: ${candidate.score.toFixed(3)}`,
+            text: `${formatKeyNamePair(candidate.name, currentNotation)}: ${candidate.score.toFixed(3)}`,
           })),
         ),
         key.sectionVotes?.length ? h('p', {
           class: 'field__hint',
-          text: `Tonal-section votes: ${key.sectionVotes.map((vote) => `${vote.key} ×${vote.windows}`).join(' · ')}${key.sectionAgreement === undefined ? '' : ` · leader ${Math.round(key.sectionAgreement * 100)}%`}`,
+          text: `Tonal-section votes: ${key.sectionVotes.map((vote) => `${formatKeyNamePair(vote.key, currentNotation)} ×${vote.windows}`).join(' · ')}${key.sectionAgreement === undefined ? '' : ` · leader ${Math.round(key.sectionAgreement * 100)}%`}`,
         }) : null,
         key.rangeEvidence ? h('p', {
           class: 'field__hint',
@@ -696,7 +745,15 @@ export function createLiveAudioAnalysis(
                 { class: 'analysis-sample' },
                 h('span', { class: 'analysis-sample__number', text: `#${firstVisibleFrame + index}` }),
                 h('span', { text: frame.bpm === undefined ? 'BPM —' : `${frame.bpm.toFixed(1)} BPM · ${Math.round((frame.bpmConfidence ?? 0) * 100)}%` }),
-                h('span', { text: frame.key ? `${formatMusicalKey(frame.key)} · ${Math.round((frame.keyConfidence ?? 0) * 100)}%` : 'Key —' }),
+                h('span', {
+                  text: frame.key
+                    ? `${formatKeyPair(frame.key, frame.camelot, notation)} · ${Math.round((frame.keyConfidence ?? 0) * 100)}%`
+                    : 'Key —',
+                }),
+                frame.keyComparison ? h('span', {
+                  class: 'field__hint',
+                  text: `E ${engineReading(frame.keyComparison.essentia, notation)} · C ${engineReading(frame.keyComparison.custom, notation)} · ${frame.keyComparison.agreed ? 'agree' : frame.keyComparison.agreed === false ? 'differ' : 'one result'}`,
+                }) : null,
               ),
             ),
           ),
@@ -757,6 +814,7 @@ export function createLiveAudioAnalysis(
           h('span', { text: saving ? 'save' : `${completion}%` }),
         ),
         h('span', { class: 'chip', text: 'ON-DEVICE · LOCAL ONLY' }),
+        h('span', { class: 'chip', text: 'ESSENTIA + CUSTOM' }),
         h('span', { class: 'chip', text: profile === 'drum-and-bass' ? 'D&B PROFILE' : 'GENERAL PROFILE' }),
         h('span', {
           class: `state ${result.stable ? 'state--READY' : 'state--ANALYSE'}`,
@@ -807,7 +865,7 @@ export function createLiveAudioAnalysis(
       status === 'listening' && result.key && !keyLocked
         ? h('p', {
             class: 'field__hint',
-            text: `Leading key candidate: ${formatMusicalKey(result.key)}. It stays in diagnostics until enough later windows agree, so the first few notes cannot become the saved key.`,
+            text: `Leading key candidate: ${formatKeyPair(result.key, result.camelot, notation)}. It stays in diagnostics until enough later windows agree, so the first few notes cannot become the saved key.`,
           })
         : null,
       result.octaveAmbiguity
@@ -859,7 +917,7 @@ export function createLiveAudioAnalysis(
           ? h('button', {
               class: 'button button--small button--primary',
               type: 'button',
-              text: saving ? 'Saving…' : `Set key ${result.camelot ? formatCamelot(result.camelot) : formatMusicalKey(result.key!)}`,
+              text: saving ? 'Saving…' : `Set key ${formatKeyPair(result.key, result.camelot, notation)}`,
               disabled: saving,
               onclick: () => void accept('key', false),
             })

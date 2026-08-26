@@ -60,6 +60,8 @@ export interface AnalysisFrame {
   camelot?: CamelotKey;
   keyConfidence?: number;
   keyDiagnostics?: KeyDiagnostics;
+  /** Side-by-side Essentia/custom result over this exact PCM snapshot. */
+  keyComparison?: KeyEngineComparison;
 }
 
 /** Aggregated result over multiple overlapping observations. */
@@ -307,7 +309,7 @@ export type AnalysisProfile = 'general' | 'drum-and-bass';
 export interface BpmDiagnostics {
   profile: AnalysisProfile;
   /** Independent tempo estimates from the full signal and D&B frequency bands. */
-  bands: { band: 'full' | 'low' | 'mid' | 'high'; bpm?: number; confidence?: number }[];
+  bands: { band: 'full' | 'low' | 'mid' | 'high' | 'percussive'; bpm?: number; confidence?: number }[];
   /** Canonical hypotheses after D&B half-time interpretation. */
   candidates: { bpm: number; support: number; bands: string[] }[];
   agreement: number;
@@ -320,6 +322,25 @@ export interface Detection {
   key?: MusicalKey;
   keyConfidence?: number;
   keyDiagnostics?: KeyDiagnostics;
+  keyComparison?: KeyEngineComparison;
+}
+
+export interface KeyEngineReading {
+  engine: 'essentia' | 'custom';
+  key?: MusicalKey;
+  confidence?: number;
+  status: 'result' | 'no-result' | 'error';
+  detail?: string;
+  elapsedMs?: number;
+}
+
+export interface KeyEngineComparison {
+  custom: KeyEngineReading;
+  essentia: KeyEngineReading;
+  agreed?: boolean;
+  selected: 'essentia' | 'custom';
+  /** Always true: both engines consume the same captured PCM snapshot. */
+  sameSamples: true;
 }
 
 /**
@@ -340,12 +361,38 @@ const PITCH_CLASSES: readonly PitchClass[] = [
   'C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B',
 ];
 
-const MAJOR_PROFILE = [
+/**
+ * Key profiles: the expected relative weight of each pitch class in a key.
+ *
+ * Krumhansl-Kessler are probe-tone ratings — listeners scoring how well a tone
+ * fits a preceding context — collected on Western classical material. They are
+ * the textbook set and were the original choice here, but their major and minor
+ * shapes are close enough that the parallel-mode decision is weak, which is
+ * what the `mode` guard keeps having to refuse on.
+ *
+ * Temperley's are derived from counting actual pitch usage in a scored corpus
+ * rather than from ratings, and separate the modes more sharply: note the third
+ * (index 4 major, 3 minor) and the flat sixth. Which set is in use is decided by
+ * measurement in tests/audio-dsp.test.ts, not by preference.
+ *
+ * Only the SHAPE matters — every use goes through `correlation`, which is scale
+ * and offset invariant, so the two sets' different absolute ranges are moot.
+ */
+export const KRUMHANSL_MAJOR = [
   6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88,
 ];
-const MINOR_PROFILE = [
+export const KRUMHANSL_MINOR = [
   6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17,
 ];
+export const TEMPERLEY_MAJOR = [
+  0.748, 0.06, 0.488, 0.082, 0.67, 0.46, 0.096, 0.715, 0.104, 0.366, 0.057, 0.4,
+];
+export const TEMPERLEY_MINOR = [
+  0.712, 0.084, 0.474, 0.618, 0.049, 0.46, 0.105, 0.747, 0.404, 0.067, 0.133, 0.33,
+];
+
+const MAJOR_PROFILE = TEMPERLEY_MAJOR;
+const MINOR_PROFILE = TEMPERLEY_MINOR;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value));
@@ -372,15 +419,162 @@ function confidenceBand(confidence: number | undefined, stable: boolean): Confid
   return 'LOW';
 }
 
-/** Core tempo estimate from one onset-strength signal. */
+const ONSET_FRAME = 1024;
+/**
+ * The flux voter runs at a coarser hop than the amplitude envelope.
+ *
+ * It corroborates rather than sets precision — the amplitude bands provide
+ * that — and an STFT at hop 128 over an eight second window tripled the cost of
+ * a D&B analysis. This is a mobile-first app, so a voter that could push one
+ * frame past the two second cadence on a phone is not worth its own resolution.
+ * At 187 Hz a 174 BPM beat is still 65 frames, and the selection interpolates
+ * fractional lags anyway.
+ */
+const ONSET_FLUX_HOP = 256;
+// 128-sample hop gives a 375 Hz onset envelope. At 256 the frame quantisation
+// alone cost the fundamental period most of its correlation whenever the beat
+// did not land near a whole frame: at 186 BPM the true lag scored 0.71 while
+// two beats, landing almost exactly on a frame, scored 0.96 — so the detector
+// reported half tempo for arithmetic reasons rather than musical ones.
+const ONSET_HOP = 128;
+
+/**
+ * Onset strength as PER-BIN spectral flux, not broadband energy flux.
+ *
+ * The previous envelope was `max(0, rms - previousRms)`: the whole spectrum
+ * collapsed to one number before differencing. That cannot separate a kick from
+ * a pad, because both move RMS — and it does not even need the pad to change
+ * volume, since several sustained partials interfering inside one analysis frame
+ * modulate the total on their own. Measured on a break with a sustained A minor
+ * pad at a quarter of drum level, every tempo from 140 to 186 came back as
+ * 177.2: the pad's own interference, not the music.
+ *
+ * Two defences, both standard and both cheap:
+ *
+ *   - Difference each BIN against a MAXIMUM-FILTERED earlier frame (SuperFlux,
+ *     Böck & Widmer). A steady partial cancels against itself, and the max over
+ *     neighbouring bins absorbs vibrato and turntable wow that would otherwise
+ *     read as a new onset every time a partial drifted across a bin edge.
+ *   - Subtract a slow per-bin steady level first, so a sustained layer sits at
+ *     its own floor and contributes nothing while a transient still rises above
+ *     it. This is what makes the tempo path see percussion only.
+ *
+ * Only increases count: an onset is new energy appearing, never energy leaving.
+ */
+function onsetEnvelope(
+  samples: Float32Array,
+  sampleRate: number,
+  lowestHz = 0,
+  highestHz = Infinity,
+): number[] {
+  const frameSize = ONSET_FRAME;
+  const hop = ONSET_FLUX_HOP;
+  const bins = frameSize / 2;
+  const firstBin = Math.max(1, Math.floor((lowestHz * frameSize) / sampleRate));
+  const lastBin = Math.min(bins - 1, Math.ceil((highestHz * frameSize) / sampleRate));
+  if (lastBin <= firstBin) return [];
+
+  // Hann window, precomputed once.
+  const window = new Float64Array(frameSize);
+  for (let i = 0; i < frameSize; i += 1) {
+    window[i] = 0.5 - 0.5 * Math.cos((2 * Math.PI * i) / (frameSize - 1));
+  }
+
+  // SuperFlux compares against a frame a little way back, not the immediately
+  // preceding one: at a 375 Hz frame rate adjacent frames overlap by 94% and
+  // barely differ, so the flux is dominated by noise rather than by onsets.
+  const LAG = 3;
+  const history: Float64Array[] = [];
+  /**
+   * Per-bin steady FLOOR, tracked as a slow minimum rather than a mean.
+   *
+   * A mean-following level was tried first and halved the tempo on almost every
+   * fixture: with a time constant near one beat it tracked the kick train
+   * itself, cancelling every second kick and leaving the kick/snare alternation
+   * — a two-beat period — as the strongest thing in the envelope.
+   *
+   * The floor has to be what a bin sits at BETWEEN events. It falls instantly
+   * and rises over seconds, so a sustained pad converges onto its own level and
+   * contributes nothing, while a kick train keeps its quiet gaps and every kick
+   * still rises clear of the floor.
+   */
+  const floor = new Float64Array(lastBin + 1);
+  const floorRise = 1 - Math.exp(-hop / (2 * sampleRate));
+  const envelope: number[] = [];
+
+  const real = new Float64Array(frameSize);
+  const imag = new Float64Array(frameSize);
+
+  for (let offset = 0; offset + frameSize <= samples.length; offset += hop) {
+    for (let i = 0; i < frameSize; i += 1) {
+      real[i] = samples[offset + i]! * window[i]!;
+      imag[i] = 0;
+    }
+    fft(real, imag);
+
+    const magnitudes = new Float64Array(lastBin + 1);
+    for (let bin = firstBin; bin <= lastBin; bin += 1) {
+      // Square root compresses the dynamic range so the whole break, not just
+      // the loudest kick, shapes this envelope.
+      magnitudes[bin] = Math.sqrt(Math.hypot(real[bin]!, imag[bin]!));
+    }
+
+    // Novelty against the steady floor: a sustained layer contributes 0.
+    const novelty = new Float64Array(lastBin + 1);
+    for (let bin = firstBin; bin <= lastBin; bin += 1) {
+      const magnitude = magnitudes[bin]!;
+      floor[bin] = magnitude < floor[bin]!
+        ? magnitude
+        : floor[bin]! + floorRise * (magnitude - floor[bin]!);
+      novelty[bin] = Math.max(0, magnitude - floor[bin]!);
+    }
+
+    const past = history[history.length - LAG];
+    let flux = 0;
+    if (past) {
+      for (let bin = firstBin; bin <= lastBin; bin += 1) {
+        // Maximum filter across +/-1 bin absorbs small frequency drift.
+        let reference = past[bin]!;
+        if (bin > firstBin) reference = Math.max(reference, past[bin - 1]!);
+        if (bin < lastBin) reference = Math.max(reference, past[bin + 1]!);
+        const rise = novelty[bin]! - reference;
+        if (rise > 0) flux += rise;
+      }
+    }
+    envelope.push(flux);
+
+    history.push(novelty);
+    if (history.length > LAG + 1) history.shift();
+  }
+
+  return envelope;
+}
+
+/**
+ * Tempo estimate from a percussive onset envelope. Additive voter.
+ *
+ * Kept SEPARATE from `detectBpmCore` rather than replacing its envelope. The
+ * metrical selection below is tuned against the amplitude envelope's weighting
+ * of a loud kick versus a quiet hat; swapping in spectral flux changed that
+ * balance and halved or doubled twelve of the pinned fixtures — the same
+ * retuning swamp the superseded formulations in this file came out of. As one
+ * more voice in the D&B vote it can correct a pad-fooled reading without any
+ * proven path depending on it.
+ */
+function detectBpmPercussive(
+  samples: Float32Array,
+  sampleRate: number,
+): Pick<Detection, 'bpm' | 'bpmConfidence'> {
+  if (samples.length < sampleRate * 4) return {};
+  const envelope = onsetEnvelope(samples, sampleRate);
+  if (envelope.length < 32) return {};
+  return periodFromEnvelope(envelope, sampleRate / ONSET_FLUX_HOP);
+}
+
+/** Core tempo estimate from the amplitude onset envelope. The proven path. */
 function detectBpmCore(samples: Float32Array, sampleRate: number): Pick<Detection, 'bpm' | 'bpmConfidence'> {
   const frameSize = 1024;
-  // 128-sample hop gives a 375 Hz onset envelope. At 256 the frame quantisation
-  // alone cost the fundamental period most of its correlation whenever the beat
-  // did not land near a whole frame: at 186 BPM the true lag scored 0.71 while
-  // two beats, landing almost exactly on a frame, scored 0.96 — so the detector
-  // reported half tempo for arithmetic reasons rather than musical ones.
-  const hop = 128;
+  const hop = ONSET_HOP;
   if (samples.length < sampleRate * 4) return {};
 
   const envelope: number[] = [];
@@ -395,9 +589,16 @@ function detectBpmCore(samples: Float32Array, sampleRate: number): Pick<Detectio
     envelope.push(Math.max(0, rms - previous));
     previous = rms;
   }
+  return periodFromEnvelope(envelope, sampleRate / hop);
+}
 
+/** Metrical selection over an onset-strength signal, whatever produced it. */
+function periodFromEnvelope(
+  envelope: number[],
+  envelopeRate: number,
+): Pick<Detection, 'bpm' | 'bpmConfidence'> {
   const envelopeMean = mean(envelope);
-  if (envelopeMean < 1e-5) return {};
+  if (envelopeMean < 1e-9) return {};
   for (let i = 0; i < envelope.length; i += 1) {
     envelope[i] = Math.max(0, envelope[i]! - envelopeMean * 0.35);
   }
@@ -411,7 +612,6 @@ function detectBpmCore(samples: Float32Array, sampleRate: number): Pick<Detectio
   }
   for (let i = 0; i < envelope.length; i += 1) envelope[i] = smoothed[i]!;
 
-  const envelopeRate = sampleRate / hop;
   const minBpm = 60;
   const maxBpm = 210;
   const minLag = Math.floor((60 * envelopeRate) / maxBpm);
@@ -560,6 +760,7 @@ function detectBpmCore(samples: Float32Array, sampleRate: number): Pick<Detectio
    */
   const contenders = subdivisions.filter((entry) => entry.strength >= strongest * 0.9);
   contenders.sort((a, b) => a.lag - b.lag);
+
   const chosenLag = contenders[0]!.lag;
 
   let inRangeBest = 0;
@@ -684,6 +885,12 @@ export function detectBpm(
     { band: 'low' as const, ...detectBpmCore(split.low, sampleRate) },
     { band: 'mid' as const, ...detectBpmCore(split.mid, sampleRate) },
     { band: 'high' as const, ...detectBpmCore(split.high, sampleRate) },
+    // Spectral flux over a steady-floor-suppressed spectrum. The amplitude
+    // envelope cannot separate a kick from a sustained pad — several partials
+    // interfering inside one frame modulate the total on their own, and a pad
+    // at a quarter of drum level pulled every tempo from 140 to 186 onto the
+    // same 177.2 reading. This voter is deaf to anything that holds still.
+    { band: 'percussive' as const, ...detectBpmPercussive(samples, sampleRate) },
   ];
   const groups: { bpm: number; support: number; bands: string[]; values: number[] }[] = [];
   for (const reading of readings) {
@@ -1228,15 +1435,29 @@ export function detectKey(
       });
     }
 
-    if (profile === 'drum-and-bass') {
-      const strongestPitchPeak = Math.max(0, ...windowPitchPeaks.map((entry) => entry.weight));
-      const dominantBassPeak = windowPitchPeaks
-        .filter((entry) => entry.frequency <= 300 && entry.weight >= strongestPitchPeak * 0.18)
-        .sort((left, right) => right.weight - left.weight)[0];
-      if (dominantBassPeak) {
-        bassPeakVotes[dominantBassPeak.pitchClass] =
-          bassPeakVotes[dominantBassPeak.pitchClass]! + dominantBassPeak.weight;
+    // Register evidence, for both profiles: the bass names the root far more
+    // reliably than a full-spectrum chroma, and the third that decides major
+    // from minor lives in the upper harmony. Previously only D&B collected it,
+    // which is why the general detector refused an A-in-the-bass over a C-E-G
+    // voicing outright — it had nothing to break the relative-major tie with.
+    const strongestPitchPeak = Math.max(0, ...windowPitchPeaks.map((entry) => entry.weight));
+    const dominantBassPeak = windowPitchPeaks
+      .filter((entry) => entry.frequency <= 300 && entry.weight >= strongestPitchPeak * 0.18)
+      .sort((left, right) => right.weight - left.weight)[0];
+    if (dominantBassPeak) {
+      bassPeakVotes[dominantBassPeak.pitchClass] =
+        bassPeakVotes[dominantBassPeak.pitchClass]! + dominantBassPeak.weight;
+    }
+    if (profile !== 'drum-and-bass') {
+      // D&B derives these from unmixed note activations below; the general
+      // path uses the accepted peaks it already has.
+      for (const entry of windowPitchPeaks) {
+        const range = entry.frequency <= 300 ? bassChroma : upperChroma;
+        range[entry.pitchClass] = range[entry.pitchClass]! + entry.weight;
       }
+    }
+
+    if (profile === 'drum-and-bass') {
       const activations = transcribeNotes(
         whitened,
         firstBin,
@@ -1360,12 +1581,69 @@ export function detectKey(
     }
   }
   candidates.sort((a, b) => b.score - a.score);
+
+  /**
+   * Bounded re-rank on register evidence.
+   *
+   * Deliberately NOT another term added into the score: the acceptance
+   * thresholds are calibrated against the profile correlation, and inflating
+   * every candidate's score would quietly loosen them and let noise through.
+   * Instead, only candidates already within a whisker of the leader are
+   * reconsidered, and the register evidence decides between them. A relative
+   * major and its minor always sit that close — they share all seven notes —
+   * which is exactly the tie the bass is qualified to break.
+   */
+  const upperPeak = Math.max(...upperChroma);
+  const registerSupport = (tonic: number, tonality: Tonality): number => {
+    const bass = bassPeak ? bassPeakVotes[tonic]! / bassPeak : 0;
+    if (!upperPeak) return bass;
+    const third = upperChroma[(tonic + (tonality === 'major' ? 4 : 3)) % 12]! / upperPeak;
+    const otherThird = upperChroma[(tonic + (tonality === 'major' ? 3 : 4)) % 12]! / upperPeak;
+    return bass + Math.max(0, third - otherThird) * 0.5;
+  };
+  const leaderScore = candidates[0]?.score ?? 0;
+  const shortlist = candidates.filter((candidate) => leaderScore - candidate.score <= 0.05);
+  if (shortlist.length > 1) {
+    shortlist.sort(
+      (a, b) =>
+        registerSupport(b.tonic, b.tonality) - registerSupport(a.tonic, a.tonality) ||
+        b.score - a.score,
+    );
+    const preferred = shortlist[0]!;
+    const index = candidates.indexOf(preferred);
+    if (index > 0) {
+      candidates.splice(index, 1);
+      candidates.unshift(preferred);
+    }
+  }
+
   const best = candidates[0];
 
   // Tonic and mode are independent decisions. The old detector ignored the
   // opposite mode on the same tonic entirely, allowing A major versus A minor
   // ambiguity to retain high confidence.
-  const rival = best ? candidates.find((candidate) => candidate.tonic !== best.tonic) : undefined;
+  /**
+   * The tonic margin must not veto a decision the bass already made.
+   *
+   * A minor key and its relative major share all seven notes, so they sit a
+   * whisker apart in profile correlation whatever the material — and the
+   * register re-rank above exists precisely to separate them. Measuring the
+   * margin against a rival the bass has ruled out refused every voicing the
+   * re-rank got right: an A in the bass under a C-E-G triad promoted A minor,
+   * then failed the guard because C major still scored a shade higher.
+   *
+   * A rival is only skipped when the bass positively contradicts it, so an
+   * ambiguity the bass cannot speak to still refuses as before.
+   */
+  const bassShare = (tonic: number) => (bassPeak ? bassPeakVotes[tonic]! / bassPeak : 0);
+  const bassContradicts = (candidate: { tonic: number }) =>
+    best !== undefined &&
+    bassPeak > 0 &&
+    bassShare(best.tonic) >= 0.8 &&
+    bassShare(candidate.tonic) <= 0.3;
+  const rival = best
+    ? candidates.find((candidate) => candidate.tonic !== best.tonic && !bassContradicts(candidate))
+    : undefined;
   const margin = best ? best.score - (rival?.score ?? 0) : 0;
   const parallelMode = best
     ? candidates.find((candidate) => candidate.tonic === best.tonic && candidate.tonality !== best.tonality)

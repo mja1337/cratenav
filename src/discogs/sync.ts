@@ -67,12 +67,46 @@ export interface CollectionSyncResult {
   departuresRetained: number;
   totalOwned: number;
   newReleases: number;
+  /** Which strategy actually ran. */
+  mode: CollectionSyncMode;
+  /** Collection pages fetched. The point of an incremental sync is this being 1. */
+  pagesRead: number;
+  /**
+   * True when an incremental pass cannot account for the collection.
+   *
+   * An incremental read only sees the newest additions, so it can never detect
+   * a departure. When Discogs' own item count does not equal what we hold plus
+   * what we just added, something we did not read has changed and only a full
+   * pass can say what.
+   */
+  fullSyncRecommended: boolean;
 }
+
+/**
+ * `full` reads every page; `incremental` reads from the newest until the
+ * additions run out. Departures are only visible to a full pass.
+ */
+export type CollectionSyncMode = 'full' | 'incremental';
 
 export interface CollectionSyncOptions {
   /** Called after a complete remote read and before any departure is applied. */
   confirmDepartures?: (items: readonly CollectionItem[]) => boolean | Promise<boolean>;
+  mode?: CollectionSyncMode;
 }
+
+/**
+ * An incremental read stops after the first page that contributes nothing new.
+ *
+ * Discogs is asked for `sort=added&sort_order=desc`, so additions are at the
+ * top: once a whole page holds no copy we lack, everything older is older
+ * still. A count of consecutive known copies was tried first and is the wrong
+ * shape — the threshold has to be smaller than a page to ever fire, but larger
+ * than any run of known copies among the additions, and those two constraints
+ * conflict for a small collection or a big batch of new records.
+ *
+ * The trade-off this accepts: an edit to an OLD copy's rating or condition is
+ * not seen, because that copy is never re-read. Only a full pass sees those.
+ */
 
 export interface HydrationResult {
   hydrated: number;
@@ -170,29 +204,9 @@ export class DiscogsSync {
         }
       }
 
-      const instances = [];
-      let page = 1;
-      let totalPages = 1;
-      let totalItems = 0;
-
-      do {
-        const response = await this.client.collectionPage(username, { page, signal });
-        totalPages = response.pagination.pages || 1;
-        totalItems = response.pagination.items || 0;
-        instances.push(...(response.releases ?? []));
-
-        this.emit({
-          phase: 'collection',
-          message: `Reading collection — ${instances.length} of ${totalItems} records`,
-          current: instances.length,
-          total: totalItems,
-        });
-        page += 1;
-      } while (page <= totalPages && !signal.aborted);
-
-      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
-
-      // --- reconcile ------------------------------------------------------
+      // Local state is read BEFORE paging so an incremental pass can recognise
+      // a copy it already holds and stop as soon as the additions run out.
+      const mode = options.mode ?? 'full';
       const localItems = await getAllCollectionItems();
       const localByInstance = new Map<number, CollectionItem>();
       for (const item of localItems) {
@@ -200,6 +214,48 @@ export class DiscogsSync {
           localByInstance.set(item.discogsInstanceId, item);
         }
       }
+      const localOwned = localItems.filter(
+        (item) => item.inCollection && item.discogsInstanceId !== undefined,
+      ).length;
+
+      const instances = [];
+      let page = 1;
+      let totalPages = 1;
+      let totalItems = 0;
+      let pagesRead = 0;
+      // True once a page held nothing we lack, i.e. we are past the additions.
+      let settled = false;
+
+      do {
+        const response = await this.client.collectionPage(username, { page, signal });
+        pagesRead += 1;
+        totalPages = response.pagination.pages || 1;
+        totalItems = response.pagination.items || 0;
+        const pageInstances = response.releases ?? [];
+        instances.push(...pageInstances);
+
+        if (mode === 'incremental') {
+          settled = pageInstances.every((entry) => localByInstance.has(entry.instance_id));
+        }
+
+        this.emit({
+          phase: 'collection',
+          message: mode === 'incremental'
+            ? `Checking for new records — ${instances.length} of ${totalItems} read`
+            : `Reading collection — ${instances.length} of ${totalItems} records`,
+          current: instances.length,
+          total: mode === 'incremental' ? instances.length : totalItems,
+        });
+        page += 1;
+      } while (
+        page <= totalPages &&
+        !signal.aborted &&
+        !(mode === 'incremental' && settled)
+      );
+
+      if (signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+      // --- reconcile ------------------------------------------------------
 
       const remoteInstanceIds = new Set<number>();
       const itemsToWrite: CollectionItem[] = [];
@@ -208,16 +264,37 @@ export class DiscogsSync {
       let updated = 0;
       let newReleases = 0;
 
-      // Duplicate copies of the same release get a stable copyIndex.
+      /**
+       * Duplicate copies of the same release get a stable copyIndex.
+       *
+       * A full read sees every copy, so it can number from zero. An incremental
+       * read may see only the newest copy of a doubled release, so numbering
+       * from zero there would renumber a copy it never read — the counters are
+       * seeded from what is already stored and existing copies keep the number
+       * they have.
+       */
       const copyCounter = new Map<number, number>();
+      if (mode === 'incremental') {
+        for (const item of localItems) {
+          copyCounter.set(
+            item.discogsReleaseId,
+            (copyCounter.get(item.discogsReleaseId) ?? 0) + 1,
+          );
+        }
+      }
 
       for (const instance of instances) {
         remoteInstanceIds.add(instance.instance_id);
-        const copyIndex = copyCounter.get(instance.id) ?? 0;
-        copyCounter.set(instance.id, copyIndex + 1);
+        const existing = localByInstance.get(instance.instance_id);
+        let copyIndex: number;
+        if (existing && mode === 'incremental' && existing.copyIndex !== undefined) {
+          copyIndex = existing.copyIndex;
+        } else {
+          copyIndex = copyCounter.get(instance.id) ?? 0;
+          copyCounter.set(instance.id, copyIndex + 1);
+        }
 
         const mapped = mapCollectionInstance(instance, fieldMap, copyIndex);
-        const existing = localByInstance.get(instance.instance_id);
 
         if (existing) {
           // Preserve local identity and creation time; take Discogs' view of
@@ -259,10 +336,19 @@ export class DiscogsSync {
 
       // Records that have left the collection: retain the row and every piece
       // of analysis attached to it, just flag it as no longer owned. Spec §5.
-      const departingItems = localItems.filter((item) => {
-        const instanceId = item.discogsInstanceId;
-        return instanceId !== undefined && !remoteInstanceIds.has(instanceId) && item.inCollection;
-      });
+      /**
+       * Only a full read can see a departure.
+       *
+       * An incremental pass stops once the additions run out, so a record
+       * removed from deep in the collection was simply never read — treating
+       * its absence as a departure would flag most of the library as gone.
+       */
+      const departingItems = mode === 'full'
+        ? localItems.filter((item) => {
+            const instanceId = item.discogsInstanceId;
+            return instanceId !== undefined && !remoteInstanceIds.has(instanceId) && item.inCollection;
+          })
+        : [];
       const departuresConfirmed = !departingItems.length ||
         !options.confirmDepartures ||
         await options.confirmDepartures(departingItems);
@@ -283,19 +369,32 @@ export class DiscogsSync {
       await putReleases(releasesToWrite);
       await putCollectionItems(itemsToWrite);
 
+      /**
+       * Does Discogs' own count agree with what we now hold?
+       *
+       * This is the only cheap way an incremental pass can tell that something
+       * it did not read has changed — a removal, or a copy we had marked as no
+       * longer owned reappearing. It does not say WHAT changed, only that a
+       * full pass is needed to find out.
+       */
+      const fullSyncRecommended =
+        mode === 'incremental' && totalItems > 0 && localOwned + added !== totalItems;
+
       const syncState = await loadSyncState();
       await saveSyncState({
         ...syncState,
         lastCollectionSyncAt: nowIso(),
-        lastSeenCount: instances.length,
+        ...(mode === 'full' ? { lastFullSyncAt: nowIso() } : {}),
+        lastSeenCount: totalItems || instances.length,
       });
 
       const pending = await countPendingHydration();
+      const synced = mode === 'incremental'
+        ? `${added} new, ${updated} changed`
+        : `${instances.length} records synced`;
       this.emit({
         phase: 'complete',
-        message: pending
-          ? `${instances.length} records synced · ${pending} need metadata`
-          : `${instances.length} records synced`,
+        message: pending ? `${synced} · ${pending} need metadata` : synced,
         current: instances.length,
         total: instances.length,
       });
@@ -305,8 +404,11 @@ export class DiscogsSync {
         updated,
         departed,
         departuresRetained,
-        totalOwned: instances.length,
+        totalOwned: mode === 'full' ? instances.length : totalItems || instances.length,
         newReleases,
+        mode,
+        pagesRead,
+        fullSyncRecommended,
       };
     } catch (error) {
       this.report(error);

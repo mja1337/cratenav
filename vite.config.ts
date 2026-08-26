@@ -56,6 +56,12 @@ export default defineConfig({
     target: 'es2022',
     sourcemap: true,
   },
+  // The analysis worker dynamically loads the large Essentia WASM engine.
+  // ES worker output supports that code split; the default IIFE format does
+  // not, and the worker is already created with `{ type: 'module' }`.
+  worker: {
+    format: 'es',
+  },
   server: {
     proxy: {
       '/api/discogs': {
@@ -75,6 +81,10 @@ export default defineConfig({
       // App shell is precached; Discogs artwork is cached at runtime (see below).
       workbox: {
         globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        // Essentia's locally bundled WASM module is emitted as a 2.5 MB JS
+        // worker chunk. Cache it with the app shell so key analysis remains
+        // available offline after installation.
+        maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
         navigateFallback: `${BASE}index.html`,
         navigateFallbackDenylist: [/\/getsongbpm\.html$/],
         cleanupOutdatedCaches: true,
