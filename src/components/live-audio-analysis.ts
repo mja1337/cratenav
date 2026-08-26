@@ -1,6 +1,6 @@
 import type { Store } from '@/app/store';
 import type { AnalysisCandidate, Release, Track, TrackAnalysis } from '@/domain/types';
-import type { KeyEngineComparison } from '@/analysis/audio';
+import type { InputLevel, KeyEngineComparison } from '@/analysis/audio';
 import {
   createAnalyser,
   createAudioSource,
@@ -104,6 +104,49 @@ function engineVerdict(comparison: KeyEngineComparison): string {
     default:
       return because ?? 'only one engine answered';
   }
+}
+
+/**
+ * What to tell the user about the input level.
+ *
+ * The old advice was binary: below an RMS of 0.004 it said "very quiet", and
+ * anything above it said "Good signal". A real capture came in at 1.8% RMS with
+ * a 4% peak — about 28 dB of headroom unused — and was called good, while both
+ * key engines thrashed at low confidence because the noise floor was a large
+ * share of the signal. A level that clears the detector's hard gate is not the
+ * same as a level worth trusting a key from.
+ *
+ * Advice only: it changes no detection threshold, it just stops the panel
+ * describing a very quiet line input as healthy.
+ */
+export function levelAdvice(input: InputLevel): { caption: string; warn: boolean } {
+  if (!input.receiving) {
+    return {
+      caption: 'No audio is reaching cratenav yet. Check the input device and that the tab is not muted.',
+      warn: true,
+    };
+  }
+  if (input.peak >= 0.99) {
+    return { caption: 'Input is clipping. Lower the source or interface level.', warn: true };
+  }
+  // The FFT energy gate sits near an RMS of 0.0003, so this is well clear of it.
+  if (input.rms < 0.004) {
+    return { caption: 'Signal is very quiet — raise the interface or source level.', warn: true };
+  }
+  if (input.rms < 0.05) {
+    const headroom = input.peak > 0 ? Math.round(20 * Math.log10(1 / input.peak)) : 0;
+    return {
+      caption: `Usable, but quiet — about ${headroom} dB of headroom unused. ` +
+        'Raising the input level makes the key far more reliable; the tempo is less fussy.',
+      warn: true,
+    };
+  }
+  return {
+    caption: input.secondsUntilFirstReading > 0
+      ? `Good signal. First reading in about ${Math.ceil(input.secondsUntilFirstReading)}s.`
+      : 'Good signal. Analysing.',
+    warn: false,
+  };
 }
 
 /** One aligned line per engine, marking which answer was actually taken. */
@@ -214,16 +257,9 @@ export function createLiveAudioAnalysis(
     if (capturedNode) capturedNode.textContent = `captured ${input.secondsCaptured.toFixed(1)}s`;
     const captionNode = liveMeterRoot.querySelector<HTMLElement>('[data-meter-caption]');
     if (captionNode) {
-      captionNode.className = tooQuiet || !input.receiving || clipping ? 'notice notice--warning' : 'field__hint';
-      captionNode.textContent = !input.receiving
-        ? 'No audio is reaching cratenav yet. Check the input device and that the tab is not muted.'
-        : clipping
-          ? 'Input is clipping. Lower the source/interface level.'
-          : tooQuiet
-            ? 'Signal is very quiet — raise the interface or source level.'
-            : input.secondsUntilFirstReading > 0
-              ? `Good signal. First reading in about ${Math.ceil(input.secondsUntilFirstReading)}s.`
-              : 'Good signal. Analysing.';
+      const advice = levelAdvice(input);
+      captionNode.className = advice.warn ? 'notice notice--warning' : 'field__hint';
+      captionNode.textContent = advice.caption;
     }
   };
   const startMeter = () => {
@@ -718,15 +754,9 @@ export function createLiveAudioAnalysis(
         )
       : null;
 
-    const caption = !input.receiving
-      ? 'No audio is reaching cratenav yet. Check the input device and that the tab is not muted.'
-      : clipping
-        ? 'Input is clipping. Move the phone away from the speaker or lower the volume.'
-        : tooQuiet
-          ? 'Signal is very quiet — too quiet to analyse. Move closer to a speaker or raise the volume.'
-          : input.secondsUntilFirstReading > 0
-            ? `Good signal. First reading in about ${Math.ceil(input.secondsUntilFirstReading)}s.`
-            : 'Good signal. Analysing.';
+    // Same advice as the live tick, from one place: the two copies had already
+    // drifted apart in wording and in what counted as healthy.
+    const advice = levelAdvice(input);
 
     liveMeterRoot = h(
       'div',
@@ -752,8 +782,8 @@ export function createLiveAudioAnalysis(
       ),
       h('p', {
         'data-meter-caption': '',
-        class: tooQuiet || !input.receiving || clipping ? 'notice notice--warning' : 'field__hint',
-        text: caption,
+        class: advice.warn ? 'notice notice--warning' : 'field__hint',
+        text: advice.caption,
       }),
     );
     return liveMeterRoot;

@@ -336,6 +336,13 @@ See README.md for setup and deployment. This file holds the things that are easy
   `keyDiagnostics` (chroma, spread, best, margin, which guard rejected) so a threshold can be judged
   against reality instead of guessed at. The spread and margin checks are what stop noise, not a
   high correlation bar — noise rejection is pinned by tests at the loosened values.
+- **Clearing the detector's hard gate is not the same as a level worth trusting a key from.** The
+  level advice was binary — below an RMS of 0.004 it said "very quiet", anything above it said "Good
+  signal" — so a capture at 1.8% RMS with a 4% peak, about 28 dB of headroom unused, was described as
+  healthy while both key engines thrashed at low confidence with the noise floor a large share of the
+  signal. `levelAdvice` now has a quiet-but-usable band that states the unused headroom in dB. It is
+  advice only and moves no detection threshold. It lives in ONE place because the two copies had
+  already drifted apart in wording and in what they called healthy.
 - **Expose input metering separately from detection.** Because the detectors refuse to answer on a
   weak signal, the UI cannot otherwise distinguish "no audio is arriving" from "audio is fine but
   nothing is confident yet" — and both look like a hang. `Analyser.input()` reports receiving/RMS/
