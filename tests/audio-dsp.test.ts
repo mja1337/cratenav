@@ -744,6 +744,54 @@ describe('measured detuning', () => {
   });
 });
 
+describe('tonal-section guard', () => {
+  /*
+   * The guard is for sections that conflict with EACH OTHER. It also used to
+   * demand that the leading section vote carry the same NAME as the final
+   * answer, and that refused a great deal of good material: every window voting
+   * identically (agreement 1.00) still refused whenever the aggregate answer had
+   * a different name, which a register-informed tonic guarantees. The result was
+   * "no result · section" on every single window.
+   */
+  it('accepts a unanimous read whose windows name a near neighbour', () => {
+    const material = blend(groove(174, 14), phaseTones(14, [
+      { freq: 110, gain: 0.45 },
+      { freq: 261.63, gain: 0.22 },
+      { freq: 329.63, gain: 0.22 },
+      { freq: 392, gain: 0.22 },
+    ]));
+    const result = detectKey(material, SR, 'drum-and-bass');
+    const diagnostics = result.keyDiagnostics;
+
+    // The precondition that makes this a regression test rather than a
+    // tautology: the windows agree completely, and their own profile winner is
+    // NOT what the aggregate settled on.
+    expect(diagnostics?.sectionAgreement).toBeGreaterThan(0.9);
+    expect(diagnostics?.sectionVotes?.[0]?.key).not.toBe(diagnostics?.candidate);
+
+    expect(diagnostics?.rejectedBy).not.toBe('section');
+    expect(result.key).toMatchObject({ pitchClass: 'A', tonality: 'minor' });
+  });
+
+  it('still refuses when the sections genuinely disagree', () => {
+    // Two chords a tritone apart, each held long enough to own several windows.
+    const first = phaseTones(6, [
+      { freq: 110, gain: 0.4 }, { freq: 261.63, gain: 0.25 }, { freq: 329.63, gain: 0.25 },
+    ]);
+    const second = phaseTones(6, [
+      { freq: 155.56, gain: 0.4 }, { freq: 369.99, gain: 0.25 }, { freq: 466.16, gain: 0.25 },
+    ]);
+    const material = new Float32Array(first.length + second.length);
+    material.set(first, 0);
+    material.set(second, first.length);
+
+    const result = detectKey(blend(groove(174, 12), material), SR, 'drum-and-bass');
+    // Either it refuses, or its confidence reflects the conflict. What it must
+    // not do is report one of the two sections at high confidence.
+    if (result.key) expect(result.keyConfidence ?? 1).toBeLessThan(0.75);
+  });
+});
+
 describe('register evidence', () => {
   it('lets the bass break a relative-key tie instead of refusing', () => {
     // A2 under a C-E-G triad is an A minor 7 voicing. The upper triad alone

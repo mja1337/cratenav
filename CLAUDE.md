@@ -232,6 +232,17 @@ See README.md for setup and deployment. This file holds the things that are easy
   the difference is on ambiguous input. On a power chord with no third, Krumhansl's major wins
   outright — a confident answer to an open question — while Temperley's modes score close enough for
   the `mode` guard to refuse. Both sets stay exported so the choice is settled by test, not asserted.
+- **The tonal-section guard is for sections conflicting with EACH OTHER, and `sectionAgreement` is
+  what measures that.** It also used to demand that the leading section vote carry the same NAME as
+  the final answer, which made every register-informed decision self-refuting: moving the tonic
+  guarantees the mismatch, so the guard fired on every window and cratenav returned
+  "no result · section" for a whole capture while Essentia answered fine. Measured on an
+  A-in-the-bass voicing over a break, all forty windows voted identically (agreement 1.00) and it
+  still refused, because each window's own profile winner was F major while the aggregate was A minor.
+  Those two figures are computed differently BY DESIGN — per-window chroma against the accumulated
+  chroma, and only the aggregate gets the register re-rank — so an exact name match compares unlike
+  things. The averaging artefact it guarded against is still caught: a unanimous section vote sharing
+  fewer than six of seven notes with the aggregate answer is refused.
 - **Register evidence breaks a relative-key tie; it must not be another term in the score.** A minor
   key and its relative major share all seven notes, so they sit a whisker apart in profile
   correlation whatever the material, and the bass is what is qualified to separate them. Adding bass

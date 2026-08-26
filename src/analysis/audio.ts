@@ -5,7 +5,8 @@ import type {
   PitchClass,
   Tonality,
 } from '@/domain/types';
-import { musicalKeyToCamelot } from '@/harmonic/camelot';
+import { musicalKeyToCamelot, parseKey } from '@/harmonic/camelot';
+import { compareKeyEstimates } from './key-agreement';
 
 /** Audio capture + rolling analysis. Raw samples never leave this browser. */
 
@@ -1805,10 +1806,39 @@ export function detectKey(
   if (modeMargin < thresholds.modeMargin) {
     return { keyDiagnostics: { ...diagnostics, rejectedBy: 'mode' } };
   }
+  /**
+   * Refuse when the tonal sections conflict with EACH OTHER.
+   *
+   * That is what this guard is for, and `sectionAgreement` is what measures it.
+   * It used to also demand that the leading section vote carry the same NAME as
+   * the final answer, which refused a great deal of perfectly good material: on
+   * an A-in-the-bass voicing over a break all forty windows voted identically
+   * (agreement 1.00) and it still refused, because the aggregate answer was
+   * A minor while every window's own profile winner was F major.
+   *
+   * Those two figures are computed differently on purpose — per-window chroma
+   * against the accumulated chroma, and only the aggregate gets the register
+   * re-rank — so demanding an exact name match compares unlike things. Worse,
+   * it made every register-informed decision self-refuting: moving the tonic
+   * guaranteed the mismatch, so the guard fired on every window.
+   *
+   * The averaging artefact it was protecting against is still caught: if the
+   * sections unanimously name a key that shares fewer than six of seven notes
+   * with the aggregate answer, the aggregate is not something the sections
+   * support and it is refused. A different tonic, a different mode, or a
+   * one-note difference is not grounds to refuse a unanimous read.
+   */
+  const sectionLeaderName = sectionVotes[0]?.[0];
+  const sectionLeaderKey = sectionLeaderName ? parseKey(sectionLeaderName) : null;
+  const bestKey = best ? { pitchClass: PITCH_CLASSES[best.tonic]!, tonality: best.tonality } : undefined;
+  const sectionContradicts = Boolean(
+    sectionLeaderKey && bestKey &&
+    compareKeyEstimates(sectionLeaderKey, bestKey).sharedNotes < 6,
+  );
   if (
     profile === 'drum-and-bass' &&
     sectionVoteTotal >= 4 &&
-    (sectionVotes[0]?.[0] !== candidateName || sectionAgreement < thresholds.sectionAgreement)
+    (sectionContradicts || sectionAgreement < thresholds.sectionAgreement)
   ) {
     return { keyDiagnostics: { ...diagnostics, rejectedBy: 'section' } };
   }
