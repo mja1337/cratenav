@@ -1479,13 +1479,47 @@ button.chip[aria-pressed='true'] {
 .analysis-samples__list { display: grid; gap: 2px; }
 .analysis-sample {
   display: grid;
+  /*
+   * Number, tempo and key on the first line; the engine comparison gets a
+   * second line of its own spanning the full width.
+   *
+   * Cells are addressed by CLASS, never by position. A fourth cell added to a
+   * three-column grid auto-placed into an implicit column with no width, which
+   * wrapped a long comparison string one character per line and made every row
+   * about twenty lines tall. A `> :last-child` rule had the same fragility.
+   */
   grid-template-columns: 3rem minmax(7rem, 1fr) minmax(7rem, 1fr);
-  gap: var(--space-2);
+  gap: 2px var(--space-2);
   padding: var(--space-2);
   border-bottom: 1px solid var(--border);
   font: 0.75rem var(--font-mono);
 }
 .analysis-sample__number { color: var(--text-faint); }
+.analysis-sample__bpm { grid-column: 2; }
+.analysis-sample__key { grid-column: 3; }
+/*
+ * One line per key engine, so the two answers can be read against each other.
+ * A single run-on string mentioned both engines but compared neither.
+ */
+.analysis-sample__engines {
+  grid-column: 1 / -1;
+  display: grid;
+  gap: 1px;
+  margin-top: 3px;
+  padding-top: 3px;
+  border-top: 1px dashed var(--border);
+  color: var(--text-muted);
+}
+.analysis-sample__engine {
+  display: grid;
+  /* Name, answer, timing, then the marker for the answer actually taken. */
+  grid-template-columns: 4.75rem minmax(6rem, 1fr) 4rem 2.5rem;
+  gap: var(--space-2);
+}
+.analysis-sample__engine-name { color: var(--text-faint); }
+.analysis-sample__engine-time { color: var(--text-faint); text-align: right; }
+.analysis-sample__engine-used { color: var(--accent); font-weight: 600; }
+.analysis-sample__verdict { color: var(--text-faint); }
 .analysis-evidence, .source-comparison {
   width: 100%;
   padding: var(--space-3);
@@ -1526,6 +1560,12 @@ button.chip[aria-pressed='true'] {
 .mix-wheel__next::before { color: var(--state-ready); }
 
 @media (max-width: 420px) {
+  /* Tempo and key stack in one column beside the sample number. */
   .analysis-sample { grid-template-columns: 2.5rem 1fr; }
-  .analysis-sample > :last-child { grid-column: 2; }
+  .analysis-sample__bpm,
+  .analysis-sample__key { grid-column: 2; }
+  .analysis-sample__engines { grid-column: 1 / -1; }
+  /* Drop the timing column before the answer itself gets squeezed. */
+  .analysis-sample__engine { grid-template-columns: 4.75rem 1fr 2.5rem; }
+  .analysis-sample__engine-time { display: none; }
 }

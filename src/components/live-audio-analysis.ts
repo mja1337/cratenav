@@ -63,6 +63,45 @@ function chromaLabel(diagnostics: KeyDiagnostics): string {
   return `Chroma: strongest notes ${strongest}`;
 }
 
+/**
+ * One engine's key claim, with no timing attached.
+ *
+ * The timing belongs in its own column so the two engines' answers line up and
+ * can actually be read against each other. Running it all into one string —
+ * "E 10B · D major · 69% · 37 ms · C 6A · G minor · 78% · 261 ms · differ" —
+ * meant both engines were mentioned but neither could be compared.
+ */
+function engineKeyText(reading: KeyEngineReading, notation: 'camelot' | 'musical'): string {
+  if (reading.status === 'error') return `error · ${reading.detail ?? 'unavailable'}`;
+  if (!reading.key) return `no result${reading.detail ? ` · ${reading.detail}` : ''}`;
+  const key = formatKeyPair(reading.key, musicalKeyToCamelot(reading.key) ?? undefined, notation);
+  const confidence = reading.confidence === undefined
+    ? ''
+    : ` · ${Math.round(reading.confidence * 100)}%`;
+  return `${key}${confidence}`;
+}
+
+/** One aligned line per engine, marking which answer was actually taken. */
+function engineRow(
+  label: string,
+  reading: KeyEngineReading,
+  selected: boolean,
+  notation: 'camelot' | 'musical',
+): HTMLElement {
+  return h(
+    'span',
+    { class: 'analysis-sample__engine' },
+    h('span', { class: 'analysis-sample__engine-name', text: label }),
+    h('span', { class: 'analysis-sample__engine-key', text: engineKeyText(reading, notation) }),
+    h('span', {
+      class: 'analysis-sample__engine-time',
+      text: reading.elapsedMs === undefined ? '' : `${Math.round(reading.elapsedMs)} ms`,
+    }),
+    // Never signalled by colour alone: the word carries the meaning.
+    h('span', { class: 'analysis-sample__engine-used', text: selected ? 'used' : '' }),
+  );
+}
+
 function engineReading(reading: KeyEngineReading, notation: 'camelot' | 'musical'): string {
   const key = reading.key
     ? formatKeyPair(reading.key, musicalKeyToCamelot(reading.key) ?? undefined, notation)
@@ -744,16 +783,32 @@ export function createLiveAudioAnalysis(
                 'div',
                 { class: 'analysis-sample' },
                 h('span', { class: 'analysis-sample__number', text: `#${firstVisibleFrame + index}` }),
-                h('span', { text: frame.bpm === undefined ? 'BPM —' : `${frame.bpm.toFixed(1)} BPM · ${Math.round((frame.bpmConfidence ?? 0) * 100)}%` }),
                 h('span', {
+                  class: 'analysis-sample__bpm',
+                  text: frame.bpm === undefined
+                    ? 'BPM —'
+                    : `${frame.bpm.toFixed(1)} BPM · ${Math.round((frame.bpmConfidence ?? 0) * 100)}%`,
+                }),
+                h('span', {
+                  class: 'analysis-sample__key',
                   text: frame.key
                     ? `${formatKeyPair(frame.key, frame.camelot, notation)} · ${Math.round((frame.keyConfidence ?? 0) * 100)}%`
                     : 'Key —',
                 }),
-                frame.keyComparison ? h('span', {
-                  class: 'field__hint',
-                  text: `E ${engineReading(frame.keyComparison.essentia, notation)} · C ${engineReading(frame.keyComparison.custom, notation)} · ${frame.keyComparison.agreed ? 'agree' : frame.keyComparison.agreed === false ? 'differ' : 'one result'}`,
-                }) : null,
+                frame.keyComparison ? h(
+                  'span',
+                  { class: 'analysis-sample__engines' },
+                  engineRow('Essentia', frame.keyComparison.essentia, frame.keyComparison.selected === 'essentia', notation),
+                  engineRow('cratenav', frame.keyComparison.custom, frame.keyComparison.selected === 'custom', notation),
+                  h('span', {
+                    class: 'analysis-sample__verdict',
+                    text: frame.keyComparison.agreed === true
+                      ? 'engines agree'
+                      : frame.keyComparison.agreed === false
+                        ? 'engines differ'
+                        : 'only one engine answered',
+                  }),
+                ) : null,
               ),
             ),
           ),

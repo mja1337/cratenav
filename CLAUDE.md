@@ -297,6 +297,14 @@ See README.md for setup and deployment. This file holds the things that are easy
   landed where it did. It must not sit behind the "Show all data points and correlations" toggle:
   hidden, the final number is an assertion with nothing behind it. Collapsed the list shows the
   latest few and states the true total, for the same reason the analysis queue does.
+- Grid cells in a captured-sample row are addressed by CLASS, never by position. A fourth cell added
+  to a three-column grid auto-placed into an implicit column with no width, so a long string wrapped
+  one character per line and every row became about twenty lines tall. A `> :last-child` rule had the
+  same fragility. Adding a cell must not be able to do that again.
+- Two key engines are compared on ALIGNED LINES, one per engine, with the timing in its own column
+  and the taken answer marked "used". Run into a single string — "E 10B · D major · 69% · 37 ms · C
+  6A · G minor · 78% · 261 ms · differ" — both engines were mentioned and neither could be compared,
+  which is the whole point of running them side by side.
 - The saving wheel spins the ring; its label must counter-rotate or the wheel spins its own text
   illegible.
 - Enrichment outcomes are durable per provider per track, so a release or track can always show what
