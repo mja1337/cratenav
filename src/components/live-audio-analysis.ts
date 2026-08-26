@@ -840,12 +840,27 @@ export function createLiveAudioAnalysis(
                           .join('  vs  ')}`,
                       })
                     : null,
-                  frame.keyDiagnostics?.rangeEvidence?.bassRoot
-                    ? h('span', {
-                        class: 'analysis-sample__verdict',
-                        text: `bass root ${frame.keyDiagnostics.rangeEvidence.bassRoot}`,
-                      })
-                    : null,
+                  (() => {
+                    const bass = frame.keyDiagnostics?.rangeEvidence?.bassRoot;
+                    const tuning = frame.keyDiagnostics?.tuning;
+                    const parts: string[] = [];
+                    if (bass) parts.push(`bass root ${bass}`);
+                    if (tuning) {
+                      const cents = Math.round(tuning.cents);
+                      parts.push(`tuning ${cents >= 0 ? '+' : ''}${cents} cents`);
+                    }
+                    if (!parts.length) return null;
+                    // Past about 35 cents every note is nearly equidistant from
+                    // two names, so the chroma smears and neither engine can be
+                    // believed. Say so rather than leaving a bare number.
+                    const smeared = tuning !== undefined && Math.abs(tuning.cents) > 35;
+                    return h('span', {
+                      class: smeared ? 'analysis-sample__separating' : 'analysis-sample__verdict',
+                      text: smeared
+                        ? `${parts.join(' · ')} — far enough off pitch that notes sit between semitones; check the deck is at zero`
+                        : parts.join(' · '),
+                    });
+                  })(),
                 ) : null,
               ),
             ),

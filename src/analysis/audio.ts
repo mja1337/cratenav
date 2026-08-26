@@ -298,6 +298,17 @@ export interface KeyDiagnostics {
   /** Energy split after harmonic/percussive median masking. */
   separation?: { harmonic: number; percussive: number };
   transientPeaksAttenuated?: number;
+  /**
+   * Measured detuning of the captured audio, in cents, and how much it varied.
+   *
+   * This is the first thing to look at when two key estimates differ by one
+   * semitone or a separating note comes back near-tied. Equal temperament is an
+   * assumption: a record cut sharp, or a deck off zero, puts every note between
+   * two semitones and the chroma smears across BOTH, at which point neither
+   * engine can be believed. Near +/-50 cents the reading is a coin toss by
+   * construction, because every note is equidistant from two names.
+   */
+  tuning?: { cents: number; spread: number; windows: number };
   /** Which guard stopped it, if any. */
   rejectedBy?: 'no-audio' | 'no-peaks' | 'spread' | 'correlation' | 'margin' | 'mode' | 'section';
   /** Thresholds in force, so the UI can state them rather than hardcode them. */
@@ -1245,6 +1256,12 @@ export function detectKey(
   const peakEvidence: NonNullable<KeyDiagnostics['peaks']> = [];
   const sectionVoteCounts = new Map<string, number>();
   let previousWhitened: Float64Array | undefined;
+  // Per-window detuning, accumulated as a circular mean: the offset is measured
+  // modulo one semitone, so a plain average of +0.45 and -0.45 would report 0
+  // when both windows are in fact half a semitone out.
+  let tuningX = 0;
+  let tuningY = 0;
+  let tuningWindows = 0;
   const bassChroma = Array<number>(12).fill(0);
   const bassPeakVotes = Array<number>(12).fill(0);
   const upperChroma = Array<number>(12).fill(0);
@@ -1543,6 +1560,10 @@ export function detectKey(
       chromaSum[pitchClass] = chromaSum[pitchClass]! + windowChromaSum[pitchClass]!;
       chromaBins[pitchClass] = chromaBins[pitchClass]! + windowChromaBins[pitchClass]!;
     }
+    const tuningAngle = 2 * Math.PI * tuningOffset;
+    tuningX += Math.cos(tuningAngle);
+    tuningY += Math.sin(tuningAngle);
+    tuningWindows += 1;
     windows += 1;
   }
 
@@ -1758,6 +1779,15 @@ export function detectKey(
       },
     } : {}),
     transientPeaksAttenuated,
+    ...(tuningWindows ? {
+      tuning: {
+        cents: (Math.atan2(tuningY / tuningWindows, tuningX / tuningWindows) / (2 * Math.PI)) * 100,
+        // Resultant length: 1 means every window agreed on the detuning, 0
+        // means they disagreed completely and the estimate means nothing.
+        spread: 1 - Math.hypot(tuningX / tuningWindows, tuningY / tuningWindows),
+        windows: tuningWindows,
+      },
+    } : {}),
     ...(candidateName ? { candidate: candidateName } : {}),
     candidates: candidates.slice(0, 5).map((candidate) => ({
       name: `${PITCH_CLASSES[candidate.tonic]!} ${candidate.tonality}`,

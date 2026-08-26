@@ -1,6 +1,8 @@
 import type { Detection, KeyEngineReading, KeyEngineComparison } from './audio';
 import {
+  bassSupportsScale,
   compareKeyEstimates,
+  decisiveSeparatingNote,
   discriminatingNotes,
   tonicFromBass,
 } from './key-agreement';
@@ -162,6 +164,8 @@ export function combineKeyEngines(
   const higherConfidence = (): 'essentia' | 'custom' =>
     (essentia.confidence ?? 0) > (custom.confidence ?? 0) ? 'essentia' : 'custom';
 
+  const separating = discriminatingNotes(difference, customDetection.keyDiagnostics?.chroma);
+
   let selected: 'essentia' | 'custom';
   let selectedBecause: string;
   let unresolved = false;
@@ -190,9 +194,30 @@ export function combineKeyEngines(
       selectedBecause = 'same notes; bass inconclusive, took the higher confidence';
     }
   } else {
-    selected = higherConfidence();
-    selectedBecause = `different notes (${difference.sharedNotes}/7 shared); took the higher confidence`;
-    unresolved = true;
+    /*
+     * Different note sets. There is real evidence available here and it used to
+     * be thrown away in favour of a confidence comparison between two engines
+     * whose confidences are not comparable. On a real capture the separating
+     * notes came back at 44% against 43% — the chroma plainly could not tell —
+     * while the dominant bass note was C#, which B minor contains and E minor
+     * does not. That is a decision the bass can make and the confidence figures
+     * cannot.
+     */
+    const shared = `different notes (${difference.sharedNotes}/7 shared)`;
+    const byNote = decisiveSeparatingNote(separating);
+    const byBass = bassSupportsScale(bassRoot, custom.key, essentia.key);
+    if (byNote) {
+      selected = byNote === 'first' ? 'custom' : 'essentia';
+      const note = separating[0]!.note;
+      selectedBecause = `${shared}; ${note} clearly present`;
+    } else if (byBass) {
+      selected = byBass === 'first' ? 'custom' : 'essentia';
+      selectedBecause = `${shared}; separating notes tied, but bass ${bassRoot} is only in this scale`;
+    } else {
+      selected = higherConfidence();
+      selectedBecause = `${shared}; no evidence separates them, took the higher confidence`;
+      unresolved = true;
+    }
   }
 
   const chosen = selected === 'essentia' ? essentia : custom;
@@ -206,7 +231,7 @@ export function combineKeyEngines(
     sharedNotes: difference.sharedNotes,
     selectedBecause,
     unresolved,
-    discriminating: discriminatingNotes(difference, customDetection.keyDiagnostics?.chroma)
+    discriminating: separating
       .map((entry) => ({
         note: entry.note,
         strength: entry.strength,

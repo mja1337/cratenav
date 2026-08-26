@@ -117,6 +117,60 @@ describe('key engine precedence', () => {
     expect(combined.keyComparison?.discriminating).toEqual([]);
   });
 
+  it('lets a clearly present separating note decide, over confidence', () => {
+    // A# is in B major and not in E major. The chroma holds A# and not A, so
+    // the note evidence settles it even though the other engine is no less
+    // confident — the note the record actually contains names the key.
+    const combined = combineKeyEngines(
+      detection({ pitchClass: 'E', tonality: 'major' }, 0.95,
+        diagnostics({ notes: ['B', 'C#', 'D#', 'E', 'F#', 'G#', 'A#'] })),
+      reading({ pitchClass: 'B', tonality: 'major' }, 0.4),
+    );
+    expect(combined.keyComparison?.selected).toBe('essentia');
+    expect(combined.keyComparison?.selectedBecause).toMatch(/A# clearly present/);
+    expect(combined.keyComparison?.unresolved).toBe(false);
+  });
+
+  it('falls to the bass when the separating notes are tied', () => {
+    /*
+     * The real capture: Essentia B minor, custom E minor, separating notes C
+     * against C# at 44% and 43% — the chroma cannot tell. The dominant bass
+     * note was C#, which B minor contains and E minor does not, so the bass
+     * decides what the confidence figures cannot.
+     */
+    const chroma = Array<number>(12).fill(0.05);
+    chroma[pitchClassIndex('C')] = 0.44;
+    chroma[pitchClassIndex('C#')] = 0.43;
+    const combined = combineKeyEngines(
+      detection({ pitchClass: 'E', tonality: 'minor' }, 0.89, {
+        chroma, spread: 1, best: 0.6, margin: 0.1,
+        rangeEvidence: { bassRoot: 'C#' },
+        thresholds: { spread: 0.14, correlation: 0.32, margin: 0.03, modeMargin: 0.015, sectionAgreement: 0.45 },
+      } as KeyDiagnostics),
+      reading({ pitchClass: 'B', tonality: 'minor' }, 0.69),
+    );
+    expect(combined.key).toEqual({ pitchClass: 'B', tonality: 'minor' });
+    expect(combined.keyComparison?.selected).toBe('essentia');
+    expect(combined.keyComparison?.selectedBecause).toMatch(/bass C# is only in this scale/);
+  });
+
+  it('admits when nothing separates them', () => {
+    // Bass note in both scales, separating notes tied: no evidence at all.
+    const chroma = Array<number>(12).fill(0.05);
+    chroma[pitchClassIndex('C')] = 0.44;
+    chroma[pitchClassIndex('C#')] = 0.43;
+    const combined = combineKeyEngines(
+      detection({ pitchClass: 'E', tonality: 'minor' }, 0.89, {
+        chroma, spread: 1, best: 0.6, margin: 0.1,
+        rangeEvidence: { bassRoot: 'E' },
+        thresholds: { spread: 0.14, correlation: 0.32, margin: 0.03, modeMargin: 0.015, sectionAgreement: 0.45 },
+      } as KeyDiagnostics),
+      reading({ pitchClass: 'B', tonality: 'minor' }, 0.69),
+    );
+    expect(combined.keyComparison?.unresolved).toBe(true);
+    expect(combined.keyComparison?.selectedBecause).toMatch(/no evidence separates them/);
+  });
+
   it('still uses whichever engine answered when only one did', () => {
     const combined = combineKeyEngines(
       { key: undefined, keyConfidence: undefined },

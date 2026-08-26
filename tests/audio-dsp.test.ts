@@ -704,6 +704,46 @@ describe('key profile choice', () => {
   });
 });
 
+describe('measured detuning', () => {
+  /*
+   * Equal temperament is an assumption, not a measurement. A record cut sharp
+   * or a deck off zero puts every note between two semitones and the chroma
+   * smears across both — which is what a separating note coming back at 44%
+   * against 43% looks like. The offset was already measured internally and
+   * corrected for; it was just never reported, so the one explanation a DJ
+   * could act on was invisible.
+   */
+  const detuned = (cents: number) => {
+    const ratio = 2 ** (cents / 1200);
+    return phaseTones(8, [
+      { freq: 220 * ratio, gain: 0.3 },
+      { freq: 261.63 * ratio, gain: 0.3 },
+      { freq: 329.63 * ratio, gain: 0.3 },
+    ]);
+  };
+
+  it.each([0, 20, -20, 35])('reports a %i cent offset', (cents) => {
+    const tuning = detectKey(detuned(cents), SR).keyDiagnostics?.tuning;
+    expect(tuning, 'no tuning reported').toBeDefined();
+    expect(Math.abs(tuning!.cents - cents), `reported ${tuning!.cents.toFixed(1)}`)
+      .toBeLessThan(12);
+  });
+
+  it('still names the key while it can still tell which semitone', () => {
+    // Inside about 50 cents the correction recovers the native key; beyond it
+    // the nearer semitone IS the effective key, per spec v1.1.
+    expect(detectKey(detuned(25), SR).key).toMatchObject({ pitchClass: 'A', tonality: 'minor' });
+  });
+
+  it('agrees across windows on a steadily detuned record', () => {
+    // Low spread means every window measured the same offset, so the figure can
+    // be trusted. A high spread would mean the estimate itself is noise.
+    const tuning = detectKey(detuned(30), SR).keyDiagnostics?.tuning;
+    expect(tuning!.windows).toBeGreaterThan(1);
+    expect(tuning!.spread).toBeLessThan(0.2);
+  });
+});
+
 describe('register evidence', () => {
   it('lets the bass break a relative-key tie instead of refusing', () => {
     // A2 under a C-E-G triad is an A minor 7 voicing. The upper triad alone

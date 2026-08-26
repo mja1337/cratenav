@@ -128,3 +128,55 @@ export function discriminatingNotes(
     })),
   ].sort((a, b) => b.strength - a.strength);
 }
+
+/**
+ * Which estimate's scale contains the bass note, when only one of them does.
+ *
+ * Weaker evidence than the bass naming a tonic outright, but discriminating:
+ * a recording whose dominant bass note is C# cannot plausibly be in E minor,
+ * which has no C# in it. Returns undefined when both scales contain the note or
+ * neither does, because then it says nothing.
+ */
+export function bassSupportsScale(
+  bassRoot: string | undefined,
+  first: MusicalKey | undefined,
+  second: MusicalKey | undefined,
+): 'first' | 'second' | undefined {
+  if (!bassRoot || !first || !second) return undefined;
+  const index = NAMES.indexOf(bassRoot as PitchClass);
+  if (index < 0) return undefined;
+  const inFirst = pitchClassesOf(first).includes(index);
+  const inSecond = pitchClassesOf(second).includes(index);
+  if (inFirst === inSecond) return undefined;
+  return inFirst ? 'first' : 'second';
+}
+
+/**
+ * Minimum relative gap for the separating notes to have settled the question.
+ *
+ * A judgement, not a measurement: it is set well clear of the near-ties seen on
+ * real captures (65 against 53, 53 against 49, 44 against 43 — all of which
+ * mean the chroma cannot tell) while still firing on a clean difference like 82
+ * against 14. Below it, the note evidence is declared inconclusive rather than
+ * being read as a decision.
+ */
+const SEPARATING_DECISIVE = 0.2;
+
+/**
+ * Which estimate the separating notes support, if either.
+ *
+ * When two keys differ by a single note, the note the recording actually
+ * contains names the key — but only when one of them clearly outweighs the
+ * other. Near-tied energy means the chroma is smeared or the material is
+ * chromatic, and forcing a choice there would be inventing an answer.
+ */
+export function decisiveSeparatingNote(
+  notes: readonly DiscriminatingNote[],
+): 'first' | 'second' | undefined {
+  if (notes.length < 2) return notes[0]?.supports;
+  const [top, next] = notes;
+  if (!top || !next || top.strength <= 0) return undefined;
+  return (top.strength - next.strength) / top.strength >= SEPARATING_DECISIVE
+    ? top.supports
+    : undefined;
+}

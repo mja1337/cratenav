@@ -269,6 +269,26 @@ See README.md for setup and deployment. This file holds the things that are easy
   the tonic, because that is the only evidence qualified to separate keys that share every note.
   Confidence is a last resort throughout, since the two engines' confidence figures measure
   different things and are only loosely comparable.
+- **Report the measured detuning, do not just correct for it silently.** The per-window tuning offset
+  was measured and applied from the start but never surfaced, so the one explanation a DJ can act on
+  was invisible: a record cut sharp or a deck off zero puts every note between two semitones and the
+  chroma smears across BOTH. That is exactly what a separating note coming back at 44% against 43%
+  looks like. `KeyDiagnostics.tuning` carries cents, a cross-window spread (0 means every window
+  agreed, so the figure can be trusted) and the window count. Past about 35 cents the UI says notes
+  are sitting between semitones rather than printing a bare number. Averaging offsets must be
+  CIRCULAR — they are modulo one semitone, so a plain mean of +0.45 and -0.45 reports 0 when both
+  windows are half a semitone out.
+- **Use the evidence that exists before falling back to comparing confidences.** For two estimates
+  with different note sets the order is: a clearly present separating note, then the bass note when
+  it is in exactly one of the two scales, and only then confidence with `unresolved` set. On a real
+  capture the separating notes were 44% against 43% — the chroma plainly could not tell — while the
+  dominant bass note was C#, which B minor contains and E minor does not. Comparing two engines'
+  confidence figures there was throwing away the only evidence that could decide, and those figures
+  are not calibrated against each other anyway.
+- **A near-tie in the separating notes is not a decision.** `SEPARATING_DECISIVE` is deliberately set
+  clear of the near-ties measured on real captures (65/53, 53/49, 44/43) while still firing on a
+  clean difference (82/14). Below it the note evidence is declared inconclusive rather than being
+  read as an answer.
 - **Refuse to answer.** A near-flat chroma (spread < 0.18) or a low correlation means no key.
   Garbage at high confidence is worse than an honest absence; white noise must return nothing.
 - **The beat is an integer SUBDIVISION of the dominant periodicity.** Every statistic computed only
