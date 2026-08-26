@@ -150,18 +150,68 @@ export function levelAdvice(input: InputLevel): { caption: string; warn: boolean
   };
 }
 
+/**
+ * Why the custom engine declined, with the number and the bar it missed.
+ *
+ * "no result · margin" says nothing a DJ or a maintainer can act on: it does not
+ * say whether the statistic missed by a hair or by a mile, and it does not say
+ * what the engine would have answered. Both matter — a guard missed by 0.002 is
+ * a calibration question, one missed by half is the material — and the
+ * thresholds are reported rather than hardcoded so the panel cannot drift out of
+ * step with `KEY_THRESHOLDS`.
+ */
+export function guardDetail(diagnostics: KeyDiagnostics | undefined): string | undefined {
+  if (!diagnostics?.rejectedBy) return undefined;
+  const limits = diagnostics.thresholds;
+  const against = (value: number | undefined, threshold: number) =>
+    `${(value ?? 0).toFixed(3)} of ${threshold}`;
+
+  switch (diagnostics.rejectedBy) {
+    case 'spread':
+      return `chroma too flat · spread ${against(diagnostics.spread, limits.spread)}`;
+    case 'correlation':
+      return `no key fits · match ${against(diagnostics.best, limits.correlation)}`;
+    case 'margin':
+      return `two keys too close · margin ${against(diagnostics.margin, limits.margin)}`;
+    case 'mode':
+      return `major or minor unclear · mode ${against(diagnostics.modeMargin, limits.modeMargin)}`;
+    case 'section':
+      // Two ways in: the windows disagreed with each other, or they agreed on
+      // something the aggregate answer does not support.
+      return (diagnostics.sectionAgreement ?? 0) < limits.sectionAgreement
+        ? `sections disagree · agreement ${against(diagnostics.sectionAgreement, limits.sectionAgreement)}`
+        : 'sections agreed on a key the whole capture does not support';
+    case 'no-audio':
+      return 'no audio';
+    case 'no-peaks':
+      return 'no usable peaks';
+    default:
+      return diagnostics.rejectedBy;
+  }
+}
+
 /** One aligned line per engine, marking which answer was actually taken. */
 function engineRow(
   label: string,
   reading: KeyEngineReading,
   selected: boolean,
   notation: 'camelot' | 'musical',
+  diagnostics?: KeyDiagnostics,
 ): HTMLElement {
+  const declined = !reading.key ? guardDetail(diagnostics) : undefined;
+  // What it would have said, so the refusal can still be compared against the
+  // other engine rather than being a dead end.
+  const leaning = !reading.key && diagnostics?.candidate
+    ? ` · leaning ${formatKeyNamePair(diagnostics.candidate, notation)}`
+    : '';
   return h(
     'span',
     { class: 'analysis-sample__engine' },
     h('span', { class: 'analysis-sample__engine-name', text: label }),
-    h('span', { class: 'analysis-sample__engine-key', text: engineKeyText(reading, notation) }),
+    h('span', {
+      class: 'analysis-sample__engine-key',
+      text: declined ? `no result · ${declined}${leaning}` : engineKeyText(reading, notation),
+    }),
     h('span', {
       class: 'analysis-sample__engine-time',
       text: reading.elapsedMs === undefined ? '' : `${Math.round(reading.elapsedMs)} ms`,
@@ -855,7 +905,7 @@ export function createLiveAudioAnalysis(
                   'span',
                   { class: 'analysis-sample__engines' },
                   engineRow('Essentia', frame.keyComparison.essentia, frame.keyComparison.selected === 'essentia', notation),
-                  engineRow('cratenav', frame.keyComparison.custom, frame.keyComparison.selected === 'custom', notation),
+                  engineRow('cratenav', frame.keyComparison.custom, frame.keyComparison.selected === 'custom', notation, frame.keyDiagnostics),
                   h('span', {
                     class: 'analysis-sample__verdict',
                     text: engineVerdict(frame.keyComparison),

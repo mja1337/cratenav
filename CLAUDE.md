@@ -361,6 +361,19 @@ See README.md for setup and deployment. This file holds the things that are easy
   noise gets reported as a tempo.
 - Both detectors are pinned by `tests/audio-dsp.test.ts` against synthetic signals with known
   answers, including the 168-186 BPM band and a noise-returns-nothing case.
+- **A refusal must state the number and the bar it missed.** "no result · margin" tells nobody
+  anything: not whether the statistic missed by a hair or by a mile, and not what the engine would
+  have answered. `guardDetail` reports the failing statistic against its threshold plus the leading
+  candidate ("leaning A minor"), which is what makes a refusal comparable against the other engine
+  rather than a dead end. Thresholds are read from `keyDiagnostics.thresholds`, never hardcoded in
+  the panel, or the two drift apart.
+- **KNOWN CALIBRATION DEBT: `KEY_THRESHOLDS` was set against Krumhansl and the profiles are now
+  Temperley.** Measured on a flat chroma of the kind real captures produce, Temperley gives a
+  correlation of 0.541 against Krumhansl's 0.595 and a tonic margin of 0.055 against 0.087 — it is a
+  more peaked template, so it correlates less with a smeared chroma. Both still clear the 0.32/0.03
+  bars on that fixture, so the swap alone does not explain a refusal, but the margin bar is now much
+  closer than it was designed to be. Do not close this from synthetic material: the numbers in the
+  refusal messages exist so it can be closed from real captures.
 - **Do not set detection thresholds from synthetic signals.** The first key thresholds were tuned
   against clean triads correlating above 0.78 and rejected real mic material outright, leaving the
   UI stuck on "waiting for signal". `KEY_THRESHOLDS` is now central and `detectKey` always returns
