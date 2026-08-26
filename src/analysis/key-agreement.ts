@@ -170,13 +170,47 @@ const SEPARATING_DECISIVE = 0.2;
  * other. Near-tied energy means the chroma is smeared or the material is
  * chromatic, and forcing a choice there would be inventing an answer.
  */
-export function decisiveSeparatingNote(
+export interface SeparatingSupport {
+  /** Mean strength of the notes exclusive to each estimate. */
+  first: number;
+  second: number;
+  firstNotes: number;
+  secondNotes: number;
+  /** Which side the note evidence favours, if the gap is decisive. */
+  winner?: 'first' | 'second';
+}
+
+/**
+ * Which side the separating notes support, aggregated PER SIDE.
+ *
+ * Comparing only the top two notes was wrong and quietly useless. Two keys
+ * sharing just two of seven notes have five separating notes each, and the two
+ * strongest are frequently on the SAME side — a measured frame had G# at 100%
+ * and A# at 92%, both exclusive to the same candidate, so the comparison said
+ * nothing about which key was supported and nearly always came back "tied".
+ *
+ * The question is whether one key's exclusive notes are present and the other's
+ * are absent, so the means of the two groups are what to compare. Mean rather
+ * than sum, or a key with more exclusive notes would win by having more terms.
+ */
+export function separatingSupport(
   notes: readonly DiscriminatingNote[],
-): 'first' | 'second' | undefined {
-  if (notes.length < 2) return notes[0]?.supports;
-  const [top, next] = notes;
-  if (!top || !next || top.strength <= 0) return undefined;
-  return (top.strength - next.strength) / top.strength >= SEPARATING_DECISIVE
-    ? top.supports
-    : undefined;
+): SeparatingSupport {
+  const mean = (side: 'first' | 'second') => {
+    const values = notes.filter((note) => note.supports === side).map((note) => note.strength);
+    return values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : 0;
+  };
+  const first = mean('first');
+  const second = mean('second');
+  const firstNotes = notes.filter((note) => note.supports === 'first').length;
+  const secondNotes = notes.filter((note) => note.supports === 'second').length;
+
+  const top = Math.max(first, second);
+  const support: SeparatingSupport = { first, second, firstNotes, secondNotes };
+  // Both sides need exclusive notes for the comparison to mean anything.
+  if (!firstNotes || !secondNotes || top <= 0) return support;
+  if ((top - Math.min(first, second)) / top >= SEPARATING_DECISIVE) {
+    support.winner = first > second ? 'first' : 'second';
+  }
+  return support;
 }

@@ -127,7 +127,7 @@ describe('key engine precedence', () => {
       reading({ pitchClass: 'B', tonality: 'major' }, 0.4),
     );
     expect(combined.keyComparison?.selected).toBe('essentia');
-    expect(combined.keyComparison?.selectedBecause).toMatch(/A# clearly present/);
+    expect(combined.keyComparison?.selectedBecause).toMatch(/its own notes are present/);
     expect(combined.keyComparison?.unresolved).toBe(false);
   });
 

@@ -296,6 +296,26 @@ See README.md for setup and deployment. This file holds the things that are easy
   dominant bass note was C#, which B minor contains and E minor does not. Comparing two engines'
   confidence figures there was throwing away the only evidence that could decide, and those figures
   are not calibrated against each other anyway.
+- **Separating-note evidence is aggregated PER SIDE, never top-two.** Comparing the two strongest
+  separating notes was quietly useless: two keys sharing only two of seven notes have five
+  separating notes each, and the strongest two are frequently on the SAME side — a measured frame had
+  G# at 100% and A# at 92%, both exclusive to one candidate — so the comparison said nothing about
+  which key was supported and returned "tied" almost every time, falling through to the bass on every
+  window. Compare the MEAN of each side's exclusive notes, and mean rather than sum or the key with
+  more exclusive notes wins by having more terms. Both sides must have exclusive notes for the
+  comparison to mean anything at all.
+- **Two or three of seven shared notes is a fundamental disagreement, not a near miss.** One engine is
+  badly wrong about the material, and saying so is more use than describing it the same way as a
+  one-note gap.
+- **The limit on key accuracy is usually a flat chroma, so report it in notes rather than as a
+  spread figure.** A capture with eight of twelve pitch classes above half the peak has little tonal
+  definition to work with; that is what low confidence and wildly disagreeing engines look like, and
+  "8/12 notes above 50% — weakly tonal" is something a DJ can act on where a spread of 0.40 is not.
+- **The tuning figure moves with the harmony.** It is a magnitude-weighted circular mean of peak
+  deviations, so it wanders as the notes change even when deck speed is rock steady — a measured
+  capture drifted 14 to 19 cents flat while the tempo held at exactly 174.4 BPM, which is only
+  possible if the estimate rather than the platter was moving. Trust it only when the cross-window
+  spread is low; the UI marks it "(unsteady)" otherwise.
 - **A near-tie in the separating notes is not a decision.** `SEPARATING_DECISIVE` is deliberately set
   clear of the near-ties measured on real captures (65/53, 53/49, 44/43) while still firing on a
   clean difference (82/14). Below it the note evidence is declared inconclusive rather than being

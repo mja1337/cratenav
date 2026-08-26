@@ -2,7 +2,7 @@ import type { Detection, KeyEngineReading, KeyEngineComparison } from './audio';
 import {
   bassSupportsScale,
   compareKeyEstimates,
-  decisiveSeparatingNote,
+  separatingSupport,
   discriminatingNotes,
   tonicFromBass,
 } from './key-agreement';
@@ -203,16 +203,25 @@ export function combineKeyEngines(
      * does not. That is a decision the bass can make and the confidence figures
      * cannot.
      */
-    const shared = `different notes (${difference.sharedNotes}/7 shared)`;
-    const byNote = decisiveSeparatingNote(separating);
+    /*
+     * Two of seven shared notes is not a near miss, it is a fundamental
+     * disagreement: one of the engines is badly wrong about the material.
+     * Saying so is more use than describing it the same way as a one-note gap.
+     */
+    const shared = difference.sharedNotes <= 3
+      ? `little in common (${difference.sharedNotes}/7 notes shared)`
+      : `different notes (${difference.sharedNotes}/7 shared)`;
+    const support = separatingSupport(separating);
     const byBass = bassSupportsScale(bassRoot, custom.key, essentia.key);
-    if (byNote) {
-      selected = byNote === 'first' ? 'custom' : 'essentia';
-      const note = separating[0]!.note;
-      selectedBecause = `${shared}; ${note} clearly present`;
+    if (support.winner) {
+      selected = support.winner === 'first' ? 'custom' : 'essentia';
+      const mine = support.winner === 'first' ? support.first : support.second;
+      const theirs = support.winner === 'first' ? support.second : support.first;
+      selectedBecause = `${shared}; its own notes are present (${Math.round(mine * 100)}% against ` +
+        `${Math.round(theirs * 100)}% for the alternative)`;
     } else if (byBass) {
       selected = byBass === 'first' ? 'custom' : 'essentia';
-      selectedBecause = `${shared}; separating notes tied, but bass ${bassRoot} is only in this scale`;
+      selectedBecause = `${shared}; note evidence inconclusive, but bass ${bassRoot} is only in this scale`;
     } else {
       selected = higherConfidence();
       selectedBecause = `${shared}; no evidence separates them, took the higher confidence`;

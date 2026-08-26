@@ -15,6 +15,7 @@ import {
 import { normaliseBpm } from '@/bpm/normalise';
 import { formatCamelot, formatMusicalKey, musicalKeyToCamelot } from '@/harmonic/camelot';
 import { formatKeyNamePair, formatKeyPair } from './format';
+import { separatingSupport } from '@/analysis/key-agreement';
 import { sameTrackTitle } from '@/enrichment/matching';
 import { h } from '@/utils/dom';
 
@@ -862,22 +863,49 @@ export function createLiveAudioAnalysis(
                   // The measurement that settles it: when two keys differ by a
                   // single note, whichever of those notes the chroma actually
                   // contains names the key.
-                  frame.keyComparison.discriminating?.length
-                    ? h('span', {
-                        class: 'analysis-sample__separating',
-                        text: `separating notes · ${frame.keyComparison.discriminating
-                          .map((entry) => `${entry.note} ${Math.round(entry.strength * 100)}% (${entry.supports === 'custom' ? 'cratenav' : 'Essentia'})`)
-                          .join('  vs  ')}`,
-                      })
-                    : null,
+                  (() => {
+                    const notes = frame.keyComparison.discriminating;
+                    if (!notes?.length) return null;
+                    // Per SIDE, not a list of ten notes. Which key's own notes
+                    // are present is the question; a run-on list of every
+                    // separating note buried it and wrapped over two lines.
+                    const support = separatingSupport(notes.map((entry) => ({
+                      note: entry.note,
+                      strength: entry.strength,
+                      supports: entry.supports === 'custom' ? 'first' as const : 'second' as const,
+                    })));
+                    const side = (which: 'first' | 'second') => notes
+                      .filter((entry) => (entry.supports === 'custom' ? 'first' : 'second') === which)
+                      .map((entry) => entry.note)
+                      .join(' ');
+                    return h('span', {
+                      class: 'analysis-sample__separating',
+                      text: `separating notes · cratenav ${Math.round(support.first * 100)}% (${side('first') || '—'})` +
+                        ` · Essentia ${Math.round(support.second * 100)}% (${side('second') || '—'})`,
+                    });
+                  })(),
                   (() => {
                     const bass = frame.keyDiagnostics?.rangeEvidence?.bassRoot;
                     const tuning = frame.keyDiagnostics?.tuning;
                     const parts: string[] = [];
+                    const chroma = frame.keyDiagnostics?.chroma;
+                    if (chroma?.length === 12) {
+                      // A capture where most of the twelve pitch classes are
+                      // loud has little tonal definition to work with, which is
+                      // the actual limit on accuracy — far more legible than a
+                      // spread figure.
+                      const loud = chroma.filter((value) => value >= 0.5).length;
+                      parts.push(`${loud}/12 notes above 50%${loud >= 8 ? ' — weakly tonal' : ''}`);
+                    }
                     if (bass) parts.push(`bass root ${bass}`);
                     if (tuning) {
                       const cents = Math.round(tuning.cents);
-                      parts.push(`tuning ${cents >= 0 ? '+' : ''}${cents} cents`);
+                      // Qualify the figure when the windows did not agree on it:
+                      // the estimate is magnitude-weighted, so it moves with the
+                      // harmony and a single unsteady reading says little about
+                      // the deck.
+                      const unsteady = tuning.spread > 0.25 ? ' (unsteady)' : '';
+                      parts.push(`tuning ${cents >= 0 ? '+' : ''}${cents} cents${unsteady}`);
                     }
                     if (!parts.length) return null;
                     // Past about 35 cents every note is nearly equidistant from

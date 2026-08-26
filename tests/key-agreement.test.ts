@@ -4,6 +4,7 @@ import {
   discriminatingNotes,
   pitchClassIndex,
   pitchClassesOf,
+  separatingSupport,
   tonicFromBass,
 } from '@/analysis/key-agreement';
 import type { MusicalKey } from '@/domain/types';
@@ -91,5 +92,63 @@ describe('discriminating notes', () => {
     const difference = compareKeyEstimates(key('B', 'major'), key('E', 'major'));
     expect(discriminatingNotes(difference, undefined)).toEqual([]);
     expect(discriminatingNotes(difference, [1, 2, 3])).toEqual([]);
+  });
+});
+
+describe('aggregating separating-note evidence', () => {
+  /**
+   * Comparing only the two strongest separating notes was wrong and quietly
+   * useless. Keys sharing two of seven notes have five separating notes each,
+   * and the two strongest are frequently on the SAME side — a measured frame
+   * had G# at 100% and A# at 92%, both exclusive to one candidate — so the
+   * comparison said nothing about which key was supported and came back
+   * "tied" almost every time.
+   */
+  const note = (
+    name: MusicalKey['pitchClass'],
+    strength: number,
+    supports: 'first' | 'second',
+  ) => ({ note: name, strength, supports });
+
+  it('decides when the top two notes are on the same side', () => {
+    // Exactly the measured frame: the strongest two both support `first`.
+    const support = separatingSupport([
+      note('G#', 1.0, 'first'), note('A#', 0.92, 'first'),
+      note('A', 0.7, 'second'), note('D#', 0.65, 'first'),
+      note('C#', 0.5, 'first'), note('B', 0.47, 'second'),
+      note('E', 0.43, 'second'), note('D', 0.37, 'second'),
+    ]);
+    expect(support.winner).toBe('first');
+    expect(support.firstNotes).toBe(4);
+    expect(support.secondNotes).toBe(4);
+    expect(support.first).toBeGreaterThan(support.second);
+  });
+
+  it('averages rather than sums, so more notes is not an advantage', () => {
+    // One strong note against three weak ones: the single note wins on mean.
+    const support = separatingSupport([
+      note('A#', 0.9, 'first'),
+      note('C', 0.3, 'second'), note('D', 0.3, 'second'), note('E', 0.3, 'second'),
+    ]);
+    expect(support.winner).toBe('first');
+    expect(support.first).toBeCloseTo(0.9, 5);
+    expect(support.second).toBeCloseTo(0.3, 5);
+  });
+
+  it('declines to decide when the two sides are comparable', () => {
+    const support = separatingSupport([
+      note('C', 0.44, 'first'), note('C#', 0.43, 'second'),
+    ]);
+    expect(support.winner).toBeUndefined();
+  });
+
+  it('declines when only one side has exclusive notes', () => {
+    // Nothing to compare against, so the comparison is meaningless.
+    const support = separatingSupport([note('A#', 0.9, 'first')]);
+    expect(support.winner).toBeUndefined();
+  });
+
+  it('has nothing to say about a relative pair', () => {
+    expect(separatingSupport([]).winner).toBeUndefined();
   });
 });
