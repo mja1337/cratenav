@@ -1,5 +1,6 @@
 import type { Store } from '@/app/store';
 import type { AnalysisCandidate, Release, Track, TrackAnalysis } from '@/domain/types';
+import type { KeyEngineComparison } from '@/analysis/audio';
 import {
   createAnalyser,
   createAudioSource,
@@ -79,6 +80,30 @@ function engineKeyText(reading: KeyEngineReading, notation: 'camelot' | 'musical
     ? ''
     : ` · ${Math.round(reading.confidence * 100)}%`;
   return `${key}${confidence}`;
+}
+
+/**
+ * What the two engines actually said about each other.
+ *
+ * "engines differ" was doing real damage: B major and G# minor are RELATIVE
+ * keys with the same seven notes, so reporting a flat disagreement hid that the
+ * engines agreed about the music and were only arguing over the tonic — and hid
+ * that a third opinion of E major turned on one note.
+ */
+function engineVerdict(comparison: KeyEngineComparison): string {
+  const because = comparison.selectedBecause;
+  switch (comparison.relation) {
+    case 'same':
+      return 'both engines agree';
+    case 'relative':
+      return `same seven notes, different tonic${because ? ` · ${because}` : ''}`;
+    case 'different':
+      return `different notes · ${comparison.sharedNotes ?? '?'}/7 shared${
+        comparison.unresolved ? ' · unresolved' : ''
+      }${because ? ` · ${because}` : ''}`;
+    default:
+      return because ?? 'only one engine answered';
+  }
 }
 
 /** One aligned line per engine, marking which answer was actually taken. */
@@ -802,12 +827,25 @@ export function createLiveAudioAnalysis(
                   engineRow('cratenav', frame.keyComparison.custom, frame.keyComparison.selected === 'custom', notation),
                   h('span', {
                     class: 'analysis-sample__verdict',
-                    text: frame.keyComparison.agreed === true
-                      ? 'engines agree'
-                      : frame.keyComparison.agreed === false
-                        ? 'engines differ'
-                        : 'only one engine answered',
+                    text: engineVerdict(frame.keyComparison),
                   }),
+                  // The measurement that settles it: when two keys differ by a
+                  // single note, whichever of those notes the chroma actually
+                  // contains names the key.
+                  frame.keyComparison.discriminating?.length
+                    ? h('span', {
+                        class: 'analysis-sample__separating',
+                        text: `separating notes · ${frame.keyComparison.discriminating
+                          .map((entry) => `${entry.note} ${Math.round(entry.strength * 100)}% (${entry.supports === 'custom' ? 'cratenav' : 'Essentia'})`)
+                          .join('  vs  ')}`,
+                      })
+                    : null,
+                  frame.keyDiagnostics?.rangeEvidence?.bassRoot
+                    ? h('span', {
+                        class: 'analysis-sample__verdict',
+                        text: `bass root ${frame.keyDiagnostics.rangeEvidence.bassRoot}`,
+                      })
+                    : null,
                 ) : null,
               ),
             ),

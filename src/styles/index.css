@@ -1520,6 +1520,12 @@ button.chip[aria-pressed='true'] {
 .analysis-sample__engine-time { color: var(--text-faint); text-align: right; }
 .analysis-sample__engine-used { color: var(--accent); font-weight: 600; }
 .analysis-sample__verdict { color: var(--text-faint); }
+/*
+ * The note that settles the argument. Deliberately the brightest thing in the
+ * block: when two candidate keys differ by a single note, this measurement is
+ * the answer and everything above it is working.
+ */
+.analysis-sample__separating { color: var(--text); }
 .analysis-evidence, .source-comparison {
   width: 100%;
   padding: var(--space-3);

@@ -1,4 +1,9 @@
 import type { Detection, KeyEngineReading, KeyEngineComparison } from './audio';
+import {
+  compareKeyEstimates,
+  discriminatingNotes,
+  tonicFromBass,
+} from './key-agreement';
 import type { MusicalKey, PitchClass, Tonality } from '@/domain/types';
 
 const ESSENTIA_MIN_STRENGTH = 0.25;
@@ -136,18 +141,84 @@ export function combineKeyEngines(
     detail: customDetection.keyDiagnostics?.rejectedBy,
     elapsedMs: customElapsedMs,
   };
-  const useEssentia = essentia.status === 'result' && Boolean(essentia.key);
+  const essentiaAnswered = essentia.status === 'result' && Boolean(essentia.key);
+  const customAnswered = Boolean(custom.key);
+  const difference = compareKeyEstimates(custom.key, essentia.key);
+  const bassRoot = customDetection.keyDiagnostics?.rangeEvidence?.bassRoot;
+
+  /*
+   * Essentia used to win whenever it returned anything at all, regardless of
+   * confidence or of what the other engine said. On a real recording that meant
+   * B major was reported on every window while the custom engine said G# minor
+   * at HIGHER confidence — and those two are relative keys, so the engines
+   * actually agreed about the notes and the precedence rule was silently
+   * deciding the tonic on its own.
+   *
+   * Confidence is only compared as a last resort, because the two engines'
+   * confidence figures are not calibrated against each other: Essentia's key
+   * strength and this detector's guard-derived confidence measure different
+   * things and are only loosely comparable.
+   */
+  const higherConfidence = (): 'essentia' | 'custom' =>
+    (essentia.confidence ?? 0) > (custom.confidence ?? 0) ? 'essentia' : 'custom';
+
+  let selected: 'essentia' | 'custom';
+  let selectedBecause: string;
+  let unresolved = false;
+
+  if (essentiaAnswered && !customAnswered) {
+    selected = 'essentia';
+    selectedBecause = 'only Essentia answered';
+  } else if (customAnswered && !essentiaAnswered) {
+    selected = 'custom';
+    selectedBecause = 'only the custom engine answered';
+  } else if (!customAnswered && !essentiaAnswered) {
+    selected = 'custom';
+    selectedBecause = 'neither engine answered';
+  } else if (difference.relation === 'same') {
+    selected = higherConfidence();
+    selectedBecause = 'both engines agree';
+  } else if (difference.relation === 'relative') {
+    // Same seven notes, so only the tonic is in question and the lowest
+    // register is the evidence qualified to settle it.
+    const fromBass = tonicFromBass(bassRoot, custom.key, essentia.key);
+    if (fromBass) {
+      selected = fromBass === 'first' ? 'custom' : 'essentia';
+      selectedBecause = `same notes; bass on ${bassRoot} names the tonic`;
+    } else {
+      selected = higherConfidence();
+      selectedBecause = 'same notes; bass inconclusive, took the higher confidence';
+    }
+  } else {
+    selected = higherConfidence();
+    selectedBecause = `different notes (${difference.sharedNotes}/7 shared); took the higher confidence`;
+    unresolved = true;
+  }
+
+  const chosen = selected === 'essentia' ? essentia : custom;
   const comparison: KeyEngineComparison = {
     custom,
     essentia,
     agreed: sameKey(custom.key, essentia.key),
-    selected: useEssentia ? 'essentia' : 'custom',
+    selected,
     sameSamples: true,
+    relation: difference.relation,
+    sharedNotes: difference.sharedNotes,
+    selectedBecause,
+    unresolved,
+    discriminating: discriminatingNotes(difference, customDetection.keyDiagnostics?.chroma)
+      .map((entry) => ({
+        note: entry.note,
+        strength: entry.strength,
+        // `first` is the custom reading, as passed to compareKeyEstimates.
+        supports: entry.supports === 'first' ? ('custom' as const) : ('essentia' as const),
+      })),
   };
+
   return {
     ...customDetection,
-    key: useEssentia ? essentia.key : customDetection.key,
-    keyConfidence: useEssentia ? essentia.confidence : customDetection.keyConfidence,
+    key: chosen.key,
+    keyConfidence: chosen.confidence,
     keyComparison: comparison,
   };
 }

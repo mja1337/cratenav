@@ -252,6 +252,23 @@ See README.md for setup and deployment. This file holds the things that are easy
   leader: measured against the leader, a bass that already agreed produced a gap of zero, nothing was
   decided, and the near-tied rival still vetoed it — an A in the bass under a C-E-G triad refused at
   a tonic margin of 0.003.
+- **A relative pair is an AGREEMENT about the notes, not a disagreement.** B major and G# minor hold
+  the same seven notes and differ only over which is the tonic, so reporting "engines differ" hid
+  that the two key engines agreed about the music entirely. `compareKeyEstimates` in
+  `src/analysis/key-agreement.ts` classifies `same` / `relative` / `different` and counts shared
+  notes, and the UI says which it is.
+- **When two candidate keys differ by one note, that note IS the answer.** B major against E major
+  turns entirely on A# versus A natural, so `discriminatingNotes` reports the separating notes with
+  the energy each actually has in the chroma. This is the measurement that settles a three-way
+  argument between two engines and an online source; everything else is inference.
+- **Neither key engine gets unconditional precedence.** Essentia used to win whenever it returned
+  anything, so on a real recording B major was reported on every window while the custom engine said
+  G# minor at HIGHER confidence — the precedence rule was silently deciding the tonic. Order now:
+  whichever engine answered if only one did; on the same key or a genuinely different note set the
+  higher confidence, with `unresolved` set for the latter; and for a relative pair the BASS decides
+  the tonic, because that is the only evidence qualified to separate keys that share every note.
+  Confidence is a last resort throughout, since the two engines' confidence figures measure
+  different things and are only loosely comparable.
 - **Refuse to answer.** A near-flat chroma (spread < 0.18) or a low correlation means no key.
   Garbage at high confidence is worse than an honest absence; white noise must return nothing.
 - **The beat is an integer SUBDIVISION of the dominant periodicity.** Every statistic computed only

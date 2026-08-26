@@ -341,6 +341,27 @@ export interface KeyEngineComparison {
   selected: 'essentia' | 'custom';
   /** Always true: both engines consume the same captured PCM snapshot. */
   sameSamples: true;
+  /**
+   * How the two readings relate. `relative` is the important one: the engines
+   * name the SAME seven notes and differ only over which is the tonic, which is
+   * an agreement about the music reported as a disagreement.
+   */
+  relation?: 'same' | 'relative' | 'different' | 'unknown';
+  /** How many of the seven notes both readings contain. */
+  sharedNotes?: number;
+  /** Why this engine's answer was taken, in words. */
+  selectedBecause?: string;
+  /**
+   * True when the engines name different note sets and nothing available can
+   * arbitrate. The value is still reported, but it is a coin toss dressed up.
+   */
+  unresolved?: boolean;
+  /**
+   * The notes present in one reading and not the other, with the energy each
+   * actually has. When two keys differ by a single note, this measurement is
+   * what settles which one the record is in.
+   */
+  discriminating?: { note: PitchClass; strength: number; supports: 'custom' | 'essentia' }[];
 }
 
 /**
